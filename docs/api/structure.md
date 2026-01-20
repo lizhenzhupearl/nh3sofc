@@ -1,0 +1,438 @@
+# Structure Module
+
+The `nh3sofc.structure` module provides tools for building and manipulating atomic structures.
+
+## BulkStructure
+
+Load and manipulate bulk crystal structures.
+
+```python
+from nh3sofc.structure import BulkStructure
+```
+
+### Constructor
+
+```python
+BulkStructure(atoms: Atoms)
+```
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `atoms` | `Atoms` | ASE Atoms object |
+
+### Class Methods
+
+#### from_cif
+
+```python
+@classmethod
+BulkStructure.from_cif(
+    filepath: str,
+    primitive: bool = False
+) -> BulkStructure
+```
+
+Load structure from CIF file.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `filepath` | `str` | - | Path to CIF file |
+| `primitive` | `bool` | `False` | Convert to primitive cell |
+
+**Example:**
+
+```python
+bulk = BulkStructure.from_cif("LaVO3.cif")
+print(f"Formula: {bulk.atoms.get_chemical_formula()}")
+```
+
+### Methods
+
+#### make_supercell
+
+```python
+make_supercell(size: tuple) -> BulkStructure
+```
+
+Create supercell.
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `size` | `tuple` | Supercell size (nx, ny, nz) |
+
+**Example:**
+
+```python
+supercell = bulk.make_supercell((2, 2, 2))
+```
+
+#### get_spacegroup
+
+```python
+get_spacegroup(symprec: float = 1e-5) -> str
+```
+
+Get space group symbol.
+
+---
+
+## SurfaceBuilder
+
+Create surface slabs from bulk structures.
+
+```python
+from nh3sofc.structure import SurfaceBuilder
+```
+
+### Constructor
+
+```python
+SurfaceBuilder(bulk_structure: Union[BulkStructure, Atoms])
+```
+
+### Methods
+
+#### create_surface
+
+```python
+create_surface(
+    miller_index: tuple,
+    layers: int = 4,
+    vacuum: float = 15.0,
+    fix_bottom: int = 2,
+    orthogonal: bool = True
+) -> SlabStructure
+```
+
+Create surface slab.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `miller_index` | `tuple` | - | Miller indices (h, k, l) |
+| `layers` | `int` | `4` | Number of atomic layers |
+| `vacuum` | `float` | `15.0` | Vacuum thickness (Å) |
+| `fix_bottom` | `int` | `2` | Layers to fix at bottom |
+| `orthogonal` | `bool` | `True` | Make orthogonal cell |
+
+**Example:**
+
+```python
+builder = SurfaceBuilder(bulk)
+surface = builder.create_surface(
+    miller_index=(0, 0, 1),
+    layers=6,
+    vacuum=15.0,
+    fix_bottom=2
+)
+```
+
+#### get_all_terminations
+
+```python
+get_all_terminations(miller_index: tuple) -> List[Atoms]
+```
+
+Get all possible terminations for a surface.
+
+---
+
+## DefectBuilder
+
+Create point defects and oxynitride structures.
+
+```python
+from nh3sofc.structure import DefectBuilder
+```
+
+### Constructor
+
+```python
+DefectBuilder(atoms: Atoms, seed: int = None)
+```
+
+### Methods
+
+#### create_oxynitride
+
+```python
+create_oxynitride(
+    nitrogen_fraction: float = 0.5,
+    vacancy_concentration: float = 0.0,
+    prefer_surface: bool = True
+) -> OxynitrideStructure
+```
+
+Create oxynitride by substituting O with N and creating vacancies.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `nitrogen_fraction` | `float` | `0.5` | Fraction of O to replace with N |
+| `vacancy_concentration` | `float` | `0.0` | Fraction of O/N to remove |
+| `prefer_surface` | `bool` | `True` | Preferentially modify surface atoms |
+
+**Example:**
+
+```python
+defect = DefectBuilder(surface)
+oxynitride = defect.create_oxynitride(
+    nitrogen_fraction=0.67,      # 2/3 O → N
+    vacancy_concentration=0.10   # 10% vacancies
+)
+print(f"Formula: {oxynitride.atoms.get_chemical_formula()}")
+```
+
+#### create_vacancy
+
+```python
+create_vacancy(
+    element: str,
+    n_vacancies: int = 1
+) -> Atoms
+```
+
+Create point vacancies.
+
+---
+
+## AdsorbatePlacer
+
+Place adsorbate molecules on surfaces using 6 methods.
+
+```python
+from nh3sofc.structure import AdsorbatePlacer
+```
+
+### Constructor
+
+```python
+AdsorbatePlacer(
+    slab: Atoms,
+    adsorbate_info: dict = None
+)
+```
+
+### Methods
+
+#### add_simple
+
+```python
+add_simple(
+    adsorbate: str,
+    position: tuple,
+    height: float = 2.0,
+    orientation: tuple = None
+) -> Atoms
+```
+
+Manual placement at specific (x, y) position.
+
+**Example:**
+
+```python
+placer = AdsorbatePlacer(slab)
+result = placer.add_simple("NH3", position=(2.5, 2.5), height=2.0)
+```
+
+#### add_random
+
+```python
+add_random(
+    adsorbate: str,
+    n_configs: int = 10,
+    height: float = 2.0,
+    seed: int = None
+) -> List[Atoms]
+```
+
+Random placement with rotation.
+
+#### add_grid
+
+```python
+add_grid(
+    adsorbate: str,
+    nx: int = 3,
+    ny: int = 3,
+    height: float = 2.0
+) -> List[Atoms]
+```
+
+Grid-based systematic placement.
+
+#### add_on_site
+
+```python
+add_on_site(
+    adsorbate: str,
+    site_type: str = "ontop",
+    atom_types: List[str] = None,
+    height: float = 2.0
+) -> List[Atoms]
+```
+
+Place on specific atomic sites.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `adsorbate` | `str` | - | Molecule name ("NH3", "H2O", etc.) |
+| `site_type` | `str` | `"ontop"` | Site type: "ontop", "bridge", "hollow" |
+| `atom_types` | `List[str]` | `None` | Filter by atom types |
+| `height` | `float` | `2.0` | Height above surface (Å) |
+
+**Example:**
+
+```python
+# Place NH3 on top of La and V atoms only
+configs = placer.add_on_site(
+    "NH3",
+    site_type="ontop",
+    atom_types=["La", "V"]
+)
+```
+
+#### add_with_collision
+
+```python
+add_with_collision(
+    adsorbate: str,
+    n_configs: int = 10,
+    min_distance: float = 2.0,
+    height: float = 2.0
+) -> List[Atoms]
+```
+
+Random placement with collision detection.
+
+#### add_catkit
+
+```python
+add_catkit(
+    adsorbate: str,
+    site_type: str = "ontop"
+) -> List[Atoms]
+```
+
+Use CatKit for automated site detection.
+
+---
+
+## DecompositionBuilder
+
+Generate NH3 decomposition intermediate configurations.
+
+```python
+from nh3sofc.structure import DecompositionBuilder
+```
+
+### Constructor
+
+```python
+DecompositionBuilder(
+    nh3_on_slab: Atoms,
+    random_seed: int = None
+)
+```
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `nh3_on_slab` | `Atoms` | Optimized NH3 on surface structure |
+| `random_seed` | `int` | Random seed for reproducibility |
+
+### Methods
+
+#### create_NH2_H_configs
+
+```python
+create_NH2_H_configs(
+    n_configs: int = 10,
+    h_height: float = 1.0,
+    min_h_distance: float = 1.5,
+    max_h_distance: float = 4.0
+) -> List[Atoms]
+```
+
+Generate NH2* + H* configurations.
+
+**Example:**
+
+```python
+decomp = DecompositionBuilder(nh3_on_slab)
+nh2_h = decomp.create_NH2_H_configs(n_configs=10)
+```
+
+#### create_NH_2H_configs
+
+```python
+create_NH_2H_configs(
+    n_configs: int = 10,
+    h_h_min: float = 1.5
+) -> List[Atoms]
+```
+
+Generate NH* + 2H* configurations.
+
+#### create_N_3H_configs
+
+```python
+create_N_3H_configs(
+    n_configs: int = 5,
+    cluster_h: bool = False
+) -> List[Atoms]
+```
+
+Generate N* + 3H* configurations.
+
+### Helper Functions
+
+#### generate_decomposition_pathway
+
+```python
+generate_decomposition_pathway(
+    nh3_on_slab: Atoms,
+    n_configs_per_step: int = 5,
+    random_seed: int = None
+) -> Dict[str, List[Atoms]]
+```
+
+Generate all decomposition intermediates.
+
+**Returns:**
+
+```python
+{
+    "NH3": [atoms],
+    "NH2_H": [atoms, atoms, ...],
+    "NH_2H": [atoms, atoms, ...],
+    "N_3H": [atoms, atoms, ...]
+}
+```
+
+---
+
+## Supported Adsorbates
+
+| Name | Formula | Atoms | Default Height |
+|------|---------|-------|---------------|
+| `"NH3"` | NH3 | 4 | 2.0 Å |
+| `"NH2"` | NH2 | 3 | 1.8 Å |
+| `"NH"` | NH | 2 | 1.5 Å |
+| `"N"` | N | 1 | 1.2 Å |
+| `"H"` | H | 1 | 1.0 Å |
+| `"H2"` | H2 | 2 | 2.5 Å |
+| `"H2O"` | H2O | 3 | 2.0 Å |
+| `"O"` | O | 1 | 1.2 Å |
+| `"OH"` | OH | 2 | 1.5 Å |

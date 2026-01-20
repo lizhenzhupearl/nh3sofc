@@ -1,0 +1,662 @@
+"""Adsorbate placement on surfaces.
+
+Provides 6 methods for placing adsorbates:
+1. add_simple() - Manual (x,y) + height using add_adsorbate()
+2. add_random() - Random placement with Euler angle rotation
+3. add_grid() - Grid-based systematic placement
+4. add_on_site() - Site-specific (above specific atom types)
+5. add_with_collision() - Random with minimum distance check
+6. add_catkit() - CatKit integration (top/bridge/hollow sites)
+"""
+
+from pathlib import Path
+from typing import Optional, List, Union, Tuple, Dict, Any
+import numpy as np
+from ase import Atoms
+from ase.build import add_adsorbate, molecule
+from ase.io import write
+
+from ..core.base import BaseStructure, get_surface_atoms
+from ..core.constants import ADSORBATES
+from .surface import SlabStructure
+
+
+class AdsorbatePlacer:
+    """
+    Class for placing adsorbates on surfaces.
+
+    Provides multiple methods for adsorbate placement with different
+    levels of control and automation.
+
+    Examples
+    --------
+    >>> slab = SlabStructure.from_file("slab.cif")
+    >>> placer = AdsorbatePlacer(slab)
+    >>>
+    >>> # Simple placement
+    >>> config = placer.add_simple("NH3", position=(5.0, 5.0), height=2.0)
+    >>>
+    >>> # Site-specific placement
+    >>> configs = placer.add_on_site("NH3", atom_types=["La", "V"])
+    >>>
+    >>> # Random placement with collision detection
+    >>> config = placer.add_with_collision("NH3", min_distance=2.0)
+    """
+
+    def __init__(self, slab: Union[SlabStructure, Atoms]):
+        """
+        Initialize AdsorbatePlacer.
+
+        Parameters
+        ----------
+        slab : SlabStructure or Atoms
+            Surface slab to place adsorbates on
+        """
+        if isinstance(slab, SlabStructure):
+            self.slab = slab.atoms.copy()
+            self._slab_obj = slab
+        else:
+            self.slab = slab.copy()
+            self._slab_obj = None
+
+        self.n_slab_atoms = len(self.slab)
+
+    def _get_molecule(self, name: str) -> Atoms:
+        """
+        Get adsorbate molecule.
+
+        Parameters
+        ----------
+        name : str
+            Molecule name (e.g., "NH3", "H2O")
+
+        Returns
+        -------
+        Atoms
+            Molecule as ASE Atoms object
+        """
+        try:
+            mol = molecule(name)
+        except KeyError:
+            # Try common variations
+            name_map = {"NH2": "NH2", "NH": "NH", "OH": "OH"}
+            if name in name_map:
+                mol = molecule(name_map[name])
+            else:
+                raise ValueError(f"Unknown molecule: {name}")
+        return mol
+
+    def _get_surface_z(self) -> float:
+        """Get the z-coordinate of the surface (highest z)."""
+        return self.slab.positions[:, 2].max()
+
+    def _get_cell_dimensions(self) -> Tuple[float, float]:
+        """Get x and y dimensions of the cell."""
+        cell = self.slab.get_cell()
+        return cell[0, 0], cell[1, 1]
+
+    def add_simple(
+        self,
+        adsorbate: str,
+        position: Tuple[float, float],
+        height: float = 2.0,
+        mol_index: int = 0,
+        rotation: Optional[Tuple[float, float, float]] = None,
+    ) -> Atoms:
+        """
+        Add adsorbate at a specific position (Method 1).
+
+        Uses ASE's add_adsorbate function for simple manual placement.
+
+        Parameters
+        ----------
+        adsorbate : str
+            Adsorbate molecule name (e.g., "NH3")
+        position : tuple
+            (x, y) position on the surface
+        height : float
+            Height above the surface (Angstrom)
+        mol_index : int
+            Index of atom in molecule to use as anchor
+        rotation : tuple, optional
+            Euler angles (alpha, beta, gamma) in radians
+
+        Returns
+        -------
+        Atoms
+            Slab with adsorbate
+        """
+        slab_copy = self.slab.copy()
+        mol = self._get_molecule(adsorbate)
+
+        # Apply rotation if specified
+        if rotation is not None:
+            alpha, beta, gamma = rotation
+            mol.rotate(np.degrees(alpha), "z")
+            mol.rotate(np.degrees(beta), "y")
+            mol.rotate(np.degrees(gamma), "x")
+
+        add_adsorbate(
+            slab_copy,
+            mol,
+            height=height,
+            position=position,
+            mol_index=mol_index
+        )
+
+        return slab_copy
+
+    def add_random(
+        self,
+        adsorbate: str,
+        n_configs: int = 10,
+        height: float = 2.0,
+        random_seed: Optional[int] = None,
+    ) -> List[Atoms]:
+        """
+        Add adsorbate at random positions with random orientations (Method 2).
+
+        Parameters
+        ----------
+        adsorbate : str
+            Adsorbate molecule name
+        n_configs : int
+            Number of random configurations to generate
+        height : float
+            Height above surface
+        random_seed : int, optional
+            Random seed for reproducibility
+
+        Returns
+        -------
+        list
+            List of Atoms objects with different configurations
+        """
+        if random_seed is not None:
+            np.random.seed(random_seed)
+
+        a, b = self._get_cell_dimensions()
+        z_top = self._get_surface_z()
+
+        configs = []
+
+        for _ in range(n_configs):
+            slab_copy = self.slab.copy()
+            mol = self._get_molecule(adsorbate)
+
+            # Random position
+            x = np.random.uniform(0, a)
+            y = np.random.uniform(0, b)
+            z = z_top + height
+
+            # Random rotation (Euler angles)
+            alpha = np.random.uniform(0, 2 * np.pi)
+            beta = np.random.uniform(0, np.pi)
+            gamma = np.random.uniform(0, 2 * np.pi)
+
+            # Apply rotation
+            mol.rotate(np.degrees(alpha), "z")
+            mol.rotate(np.degrees(beta), "y")
+            mol.rotate(np.degrees(gamma), "x")
+
+            # Translate to position
+            mol.translate([x, y, z])
+
+            # Combine
+            combined = slab_copy + mol
+            configs.append(combined)
+
+        return configs
+
+    def add_grid(
+        self,
+        adsorbate: str,
+        grid_size: Tuple[int, int] = (3, 3),
+        orientations: int = 4,
+        height: float = 2.0,
+        random_seed: Optional[int] = None,
+    ) -> List[Atoms]:
+        """
+        Add adsorbate on a grid of positions (Method 3).
+
+        Parameters
+        ----------
+        adsorbate : str
+            Adsorbate molecule name
+        grid_size : tuple
+            Grid dimensions (nx, ny)
+        orientations : int
+            Number of random orientations per grid point
+        height : float
+            Height above surface
+        random_seed : int, optional
+            Random seed
+
+        Returns
+        -------
+        list
+            List of Atoms objects for all grid positions
+        """
+        if random_seed is not None:
+            np.random.seed(random_seed)
+
+        a, b = self._get_cell_dimensions()
+        z_top = self._get_surface_z()
+
+        nx, ny = grid_size
+        x_grid = np.linspace(0, a, nx, endpoint=False) + a / (2 * nx)
+        y_grid = np.linspace(0, b, ny, endpoint=False) + b / (2 * ny)
+
+        configs = []
+
+        for x in x_grid:
+            for y in y_grid:
+                for _ in range(orientations):
+                    slab_copy = self.slab.copy()
+                    mol = self._get_molecule(adsorbate)
+
+                    # Random orientation
+                    mol.rotate(np.random.uniform(0, 360), "z")
+                    mol.rotate(np.random.uniform(0, 180), "y")
+                    mol.rotate(np.random.uniform(0, 360), "x")
+
+                    # Position
+                    mol.translate([x, y, z_top + height])
+
+                    combined = slab_copy + mol
+                    configs.append(combined)
+
+        return configs
+
+    def add_on_site(
+        self,
+        adsorbate: str,
+        atom_types: Optional[List[str]] = None,
+        site_indices: Optional[List[int]] = None,
+        n_orientations: int = 5,
+        height: float = 2.0,
+        z_threshold: float = 0.2,
+        random_seed: Optional[int] = None,
+    ) -> List[Atoms]:
+        """
+        Add adsorbate above specific surface atoms (Method 4).
+
+        This is the most physically meaningful placement method,
+        targeting specific adsorption sites.
+
+        Parameters
+        ----------
+        adsorbate : str
+            Adsorbate molecule name
+        atom_types : list, optional
+            List of element symbols to target (e.g., ["La", "V"])
+        site_indices : list, optional
+            Specific atom indices to use as sites
+        n_orientations : int
+            Number of orientations per site
+        height : float
+            Height above surface
+        z_threshold : float
+            Fraction of slab considered as surface
+        random_seed : int, optional
+            Random seed
+
+        Returns
+        -------
+        list
+            List of Atoms objects for each site/orientation
+        """
+        if random_seed is not None:
+            np.random.seed(random_seed)
+
+        # Get surface atoms
+        surface_indices, _ = get_surface_atoms(self.slab, z_threshold)
+
+        # Filter by atom type if specified
+        if atom_types is not None:
+            surface_indices = [
+                i for i in surface_indices
+                if self.slab[i].symbol in atom_types
+            ]
+
+        # Or use specific indices
+        if site_indices is not None:
+            surface_indices = site_indices
+
+        if not surface_indices:
+            raise ValueError("No suitable adsorption sites found")
+
+        configs = []
+
+        for idx in surface_indices:
+            site_pos = self.slab.positions[idx]
+
+            for _ in range(n_orientations):
+                slab_copy = self.slab.copy()
+                mol = self._get_molecule(adsorbate)
+
+                # Random orientation
+                mol.rotate(np.random.uniform(0, 360), "z")
+                mol.rotate(np.random.uniform(0, 180), "y")
+                mol.rotate(np.random.uniform(0, 360), "x")
+
+                # Place above the site
+                mol.translate([site_pos[0], site_pos[1], site_pos[2] + height])
+
+                combined = slab_copy + mol
+                configs.append(combined)
+
+        return configs
+
+    def add_with_collision(
+        self,
+        adsorbate: str,
+        min_distance: float = 2.0,
+        height: float = 2.0,
+        max_attempts: int = 100,
+        random_seed: Optional[int] = None,
+    ) -> Optional[Atoms]:
+        """
+        Add adsorbate with collision detection (Method 5).
+
+        Ensures no atoms are closer than min_distance.
+
+        Parameters
+        ----------
+        adsorbate : str
+            Adsorbate molecule name
+        min_distance : float
+            Minimum allowed distance between atoms (Angstrom)
+        height : float
+            Height above surface
+        max_attempts : int
+            Maximum placement attempts
+        random_seed : int, optional
+            Random seed
+
+        Returns
+        -------
+        Atoms or None
+            Slab with adsorbate, or None if placement failed
+        """
+        if random_seed is not None:
+            np.random.seed(random_seed)
+
+        a, b = self._get_cell_dimensions()
+        z_top = self._get_surface_z()
+
+        for attempt in range(max_attempts):
+            # Random position
+            x = np.random.uniform(0, a)
+            y = np.random.uniform(0, b)
+            z = z_top + height
+
+            mol = self._get_molecule(adsorbate)
+
+            # Random orientation
+            mol.rotate(np.random.uniform(0, 360), "z")
+            mol.rotate(np.random.uniform(0, 180), "y")
+
+            mol.translate([x, y, z])
+
+            # Check distances
+            min_dist = float("inf")
+            for slab_atom in self.slab:
+                for mol_atom in mol:
+                    dist = np.linalg.norm(
+                        slab_atom.position - mol_atom.position
+                    )
+                    min_dist = min(min_dist, dist)
+
+            if min_dist > min_distance:
+                combined = self.slab.copy() + mol
+                return combined
+
+        print(f"Warning: Failed to place adsorbate after {max_attempts} attempts")
+        return None
+
+    def add_catkit(
+        self,
+        adsorbate: str,
+        site_type: str = "ontop",
+        height: float = 2.0,
+        n_sites: Optional[int] = None,
+    ) -> List[Atoms]:
+        """
+        Add adsorbate using CatKit for site detection (Method 6).
+
+        Uses CatKit's sophisticated site-finding algorithms for
+        top, bridge, hollow, and 4-fold sites.
+
+        Parameters
+        ----------
+        adsorbate : str
+            Adsorbate molecule name
+        site_type : str
+            Site type: "ontop", "bridge", "hollow", or "4fold"
+        height : float
+            Height above surface
+        n_sites : int, optional
+            Maximum number of sites to use
+
+        Returns
+        -------
+        list
+            List of Atoms objects for each site
+
+        Raises
+        ------
+        ImportError
+            If CatKit is not installed
+        """
+        try:
+            from catkit.gen.adsorption import AdsorptionSites
+        except ImportError:
+            raise ImportError(
+                "CatKit is required for this method. "
+                "Install with: pip install catkit"
+            )
+
+        # Get adsorption sites
+        sites = AdsorptionSites(self.slab)
+
+        site_map = {
+            "ontop": "top",
+            "top": "top",
+            "bridge": "bridge",
+            "hollow": "hollow",
+            "4fold": "4fold",
+        }
+
+        site_key = site_map.get(site_type.lower(), site_type)
+        coordinates = sites.get_coordinates(site_type=site_key)
+
+        if n_sites is not None:
+            coordinates = coordinates[:n_sites]
+
+        configs = []
+        z_top = self._get_surface_z()
+
+        for coord in coordinates:
+            slab_copy = self.slab.copy()
+            mol = self._get_molecule(adsorbate)
+
+            # Place at site
+            mol.translate([coord[0], coord[1], z_top + height])
+
+            combined = slab_copy + mol
+            configs.append(combined)
+
+        return configs
+
+    def add_at_all_sites(
+        self,
+        adsorbate: str,
+        site_type: str = "ontop",
+        atom_types: Optional[List[str]] = None,
+        height: float = 2.0,
+        z_threshold: float = 0.2,
+    ) -> List[Atoms]:
+        """
+        Generate configurations for all sites of a given type.
+
+        Convenience method that combines add_on_site with single orientation.
+
+        Parameters
+        ----------
+        adsorbate : str
+            Adsorbate molecule name
+        site_type : str
+            Site type ("ontop" uses surface atoms)
+        atom_types : list, optional
+            Element types to use as sites
+        height : float
+            Height above surface
+        z_threshold : float
+            Fraction of slab considered as surface
+
+        Returns
+        -------
+        list
+            List of Atoms objects for each site
+        """
+        if site_type == "ontop":
+            return self.add_on_site(
+                adsorbate,
+                atom_types=atom_types,
+                n_orientations=1,
+                height=height,
+                z_threshold=z_threshold,
+            )
+        else:
+            # Try CatKit for other site types
+            try:
+                return self.add_catkit(adsorbate, site_type=site_type, height=height)
+            except ImportError:
+                raise ValueError(
+                    f"Site type '{site_type}' requires CatKit. "
+                    "Install with: pip install catkit"
+                )
+
+    def get_site_info(self, z_threshold: float = 0.2) -> Dict[str, Any]:
+        """
+        Get information about available adsorption sites.
+
+        Parameters
+        ----------
+        z_threshold : float
+            Fraction of slab considered as surface
+
+        Returns
+        -------
+        dict
+            Site information including counts by element
+        """
+        surface_indices, z_cutoff = get_surface_atoms(self.slab, z_threshold)
+
+        # Count by element
+        element_counts = {}
+        for idx in surface_indices:
+            symbol = self.slab[idx].symbol
+            element_counts[symbol] = element_counts.get(symbol, 0) + 1
+
+        # Get positions
+        positions = {
+            symbol: [
+                self.slab.positions[i].tolist()
+                for i in surface_indices
+                if self.slab[i].symbol == symbol
+            ]
+            for symbol in element_counts
+        }
+
+        return {
+            "n_surface_atoms": len(surface_indices),
+            "z_cutoff": z_cutoff,
+            "element_counts": element_counts,
+            "positions": positions,
+            "surface_indices": surface_indices,
+        }
+
+
+def filter_unique_configs(
+    configs: List[Atoms],
+    threshold: float = 0.5,
+) -> List[Atoms]:
+    """
+    Filter configurations to remove duplicates based on RMSD.
+
+    Parameters
+    ----------
+    configs : list
+        List of Atoms objects
+    threshold : float
+        RMSD threshold for considering structures as duplicates
+
+    Returns
+    -------
+    list
+        Filtered list of unique configurations
+    """
+    from ..core.base import calculate_rmsd
+
+    if not configs:
+        return []
+
+    unique = [configs[0]]
+
+    for config in configs[1:]:
+        is_unique = True
+        for existing in unique:
+            try:
+                rmsd = calculate_rmsd(config, existing)
+                if rmsd < threshold:
+                    is_unique = False
+                    break
+            except ValueError:
+                # Different number of atoms
+                continue
+
+        if is_unique:
+            unique.append(config)
+
+    print(f"Filtered {len(configs)} configs to {len(unique)} unique")
+    return unique
+
+
+def save_configs(
+    configs: List[Atoms],
+    output_dir: Union[str, Path],
+    prefix: str = "config",
+    format: str = "cif",
+) -> List[Path]:
+    """
+    Save configurations to files.
+
+    Parameters
+    ----------
+    configs : list
+        List of Atoms objects
+    output_dir : str or Path
+        Output directory
+    prefix : str
+        Filename prefix
+    format : str
+        Output format
+
+    Returns
+    -------
+    list
+        List of output file paths
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    paths = []
+    for i, config in enumerate(configs):
+        filename = output_dir / f"{prefix}_{i:03d}.{format}"
+        write(str(filename), config)
+        paths.append(filename)
+
+    print(f"Saved {len(configs)} configurations to {output_dir}")
+    return paths
