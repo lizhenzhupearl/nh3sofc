@@ -165,3 +165,31 @@ TOLERANCE = {
     "angle": 1e-4,            # degrees
     "rmsd": 0.5,              # A (for structure comparison)
 }
+
+# Exsolution-related constants
+# Bulk metal energies per atom (VASP PBE) and atomic radii (A)
+EXSOLUTION_METALS = {
+    "Ni": {"bulk_energy": -5.51, "radius": 1.24, "atomic_number": 28},
+    "Co": {"bulk_energy": -7.11, "radius": 1.25, "atomic_number": 27},
+    "Fe": {"bulk_energy": -8.31, "radius": 1.26, "atomic_number": 26},
+}
+
+# Perovskite ABO3 site classification
+PEROVSKITE_SITES = {
+    "A_site": ["La", "Sr", "Ba", "Ca", "K", "Na"],
+    "B_site": ["Ti", "V", "Mn", "Fe", "Co", "Ni", "Cu", "Zr", "Nb"],
+}
+
+# Magic cluster sizes for stable nanoparticles
+MAGIC_CLUSTER_SIZES = {
+    "hemispherical": [1, 4, 7, 10, 13, 19],
+    "icosahedral": [1, 13, 55, 147],
+    "cuboctahedral": [1, 13, 55, 147],
+}
+
+# Default exsolution parameters
+DEFAULT_EXSOLUTION_PARAMS = {
+    "interface_distance": 2.0,  # A, metal-oxide interface distance
+    "vacancy_coupling": 2,      # O vacancies per reduced B-site
+    "socket_depth": 1.0,        # A, particle embedding depth
+}

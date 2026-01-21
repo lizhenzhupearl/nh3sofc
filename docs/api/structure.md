@@ -436,3 +436,279 @@ Generate all decomposition intermediates.
 | `"H2O"` | H2O | 3 | 2.0 Å |
 | `"O"` | O | 1 | 1.2 Å |
 | `"OH"` | OH | 2 | 1.5 Å |
+
+---
+
+## ExsolutionBuilder
+
+Create structures for exsolution processes where transition metals migrate from perovskite bulk to surface.
+
+```python
+from nh3sofc.structure import ExsolutionBuilder
+```
+
+### Constructor
+
+```python
+ExsolutionBuilder(
+    structure: Union[SlabStructure, Atoms],
+    a_site_elements: List[str] = None,
+    b_site_elements: List[str] = None
+)
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `structure` | `SlabStructure` or `Atoms` | - | Perovskite surface slab |
+| `a_site_elements` | `List[str]` | `["La", "Sr", "Ba", "Ca"]` | A-site elements |
+| `b_site_elements` | `List[str]` | `["Ti", "V", "Mn", "Fe", "Co", "Ni"]` | B-site elements |
+
+### Methods
+
+#### identify_perovskite_sites
+
+```python
+identify_perovskite_sites() -> Dict[str, List[int]]
+```
+
+Identify A-site, B-site, and O-site atom indices.
+
+**Returns:**
+
+```python
+{
+    "A_site": [0, 1, 2, ...],
+    "B_site": [4, 5, ...],
+    "O_site": [8, 9, 10, ...]
+}
+```
+
+#### create_defective_perovskite
+
+```python
+create_defective_perovskite(
+    a_site_vacancy_fraction: float = 0.0,
+    b_site_vacancy_fraction: float = 0.0,
+    oxygen_vacancy_fraction: float = 0.0,
+    b_site_element: str = None,
+    random_seed: int = None
+) -> Atoms
+```
+
+Create defective perovskite with cation and anion vacancies.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `a_site_vacancy_fraction` | `float` | `0.0` | Fraction of A-site to remove |
+| `b_site_vacancy_fraction` | `float` | `0.0` | Fraction of B-site to remove |
+| `oxygen_vacancy_fraction` | `float` | `0.0` | Fraction of O to remove |
+| `b_site_element` | `str` | `None` | Specific B-site element for vacancies |
+| `random_seed` | `int` | `None` | Random seed for reproducibility |
+
+**Example:**
+
+```python
+builder = ExsolutionBuilder(surface)
+defective = builder.create_defective_perovskite(
+    a_site_vacancy_fraction=0.05,
+    b_site_vacancy_fraction=0.1,
+    oxygen_vacancy_fraction=0.08,
+    b_site_element="Ni"
+)
+```
+
+#### create_surface_segregation
+
+```python
+create_surface_segregation(
+    metal: str,
+    n_atoms: int = 1,
+    random_seed: int = None
+) -> Atoms
+```
+
+Move B-site metal atoms from bulk to surface layer.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `metal` | `str` | - | Element to segregate ("Ni", "Co", "Fe") |
+| `n_atoms` | `int` | `1` | Number of atoms to move |
+| `random_seed` | `int` | `None` | Random seed |
+
+#### create_nanoparticle
+
+```python
+create_nanoparticle(
+    metal: str,
+    n_atoms: int,
+    shape: str = "hemispherical",
+    position: str = "hollow",
+    interface_distance: float = 2.0,
+    socketed: bool = True,
+    random_seed: int = None
+) -> Atoms
+```
+
+Place metallic nanoparticle on surface.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `metal` | `str` | - | Metal element ("Ni", "Co", "Fe") |
+| `n_atoms` | `int` | - | Cluster size (1, 4, 7, 13, 19) |
+| `shape` | `str` | `"hemispherical"` | Shape: "hemispherical" or "icosahedral" |
+| `position` | `str` | `"hollow"` | Position: "hollow", "ontop", "bridge", "random" |
+| `interface_distance` | `float` | `2.0` | Metal-surface distance (Å) |
+| `socketed` | `bool` | `True` | Remove atoms under particle (real exsolution) |
+| `random_seed` | `int` | `None` | Random seed |
+
+**Example:**
+
+```python
+builder = ExsolutionBuilder(surface)
+with_particle = builder.create_nanoparticle(
+    metal="Ni",
+    n_atoms=13,
+    shape="hemispherical",
+    socketed=True
+)
+```
+
+#### create_exsolution_pathway
+
+```python
+create_exsolution_pathway(
+    metal: str,
+    particle_size: int,
+    vacancy_fraction: float = 0.1,
+    random_seed: int = None
+) -> List[Dict[str, Any]]
+```
+
+Generate complete exsolution pathway structures.
+
+**Returns:**
+
+```python
+[
+    {"atoms": Atoms, "stage": "pristine", "description": "..."},
+    {"atoms": Atoms, "stage": "defective", "description": "..."},
+    {"atoms": Atoms, "stage": "segregated", "description": "..."},
+    {"atoms": Atoms, "stage": "exsolved", "description": "..."}
+]
+```
+
+#### get_adsorption_sites
+
+```python
+get_adsorption_sites(
+    structure: Atoms = None,
+    particle_indices: List[int] = None
+) -> Dict[str, List[Dict]]
+```
+
+Identify adsorption sites on exsolved particle system.
+
+**Returns:**
+
+```python
+{
+    "metal_top": [...],        # Top of metal particle
+    "interface_edge": [...],   # Metal-oxide boundary
+    "vacancy_site": [...],     # Near O vacancies
+    "oxide_surface": [...]     # Remaining perovskite
+}
+```
+
+---
+
+## ExsolutionStructure
+
+Structure class with exsolution metadata tracking.
+
+```python
+from nh3sofc.structure import ExsolutionStructure
+```
+
+### Constructor
+
+```python
+ExsolutionStructure(
+    atoms: Atoms,
+    exsolution_metal: str = None,
+    nanoparticle_size: int = None,
+    a_site_vacancy_concentration: float = 0.0,
+    b_site_vacancy_concentration: float = 0.0,
+    oxygen_vacancy_concentration: float = 0.0,
+    exsolution_state: str = "pristine"
+)
+```
+
+### Attributes
+
+| Name | Type | Description |
+|------|------|-------------|
+| `exsolution_metal` | `str` | Metal being exsolved (Ni, Co, Fe) |
+| `nanoparticle_size` | `int` | Number of atoms in particle |
+| `exsolution_state` | `str` | State: pristine, defective, segregated, exsolved |
+| `oxygen_vacancy_concentration` | `float` | O vacancy fraction |
+
+---
+
+## Helper Functions
+
+### create_metallic_cluster
+
+```python
+create_metallic_cluster(
+    metal: str,
+    n_atoms: int,
+    shape: str = "hemispherical"
+) -> Atoms
+```
+
+Create isolated metallic cluster.
+
+**Example:**
+
+```python
+from nh3sofc.structure import create_metallic_cluster
+
+ni13 = create_metallic_cluster("Ni", 13, "hemispherical")
+```
+
+### generate_exsolution_series
+
+```python
+generate_exsolution_series(
+    base_structure: Atoms,
+    metal: str,
+    vacancy_range: List[float],
+    particle_sizes: List[int],
+    n_configs: int = 3,
+    random_seed: int = None
+) -> List[Dict]
+```
+
+Generate series for screening.
+
+**Example:**
+
+```python
+from nh3sofc.structure import generate_exsolution_series
+
+series = generate_exsolution_series(
+    surface,
+    metal="Ni",
+    vacancy_range=[0.0, 0.05, 0.1],
+    particle_sizes=[1, 13],
+    n_configs=3
+)
+```

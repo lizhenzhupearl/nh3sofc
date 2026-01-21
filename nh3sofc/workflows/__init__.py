@@ -35,6 +35,11 @@ from .screening import (
     AdsorbateScreening,
     run_screening,
 )
+from .exsolution import (
+    ExsolutionWorkflow,
+    ExsolutionScreeningWorkflow,
+    run_exsolution_study,
+)
 
 __all__ = [
     # Relaxation
@@ -60,4 +65,8 @@ __all__ = [
     "CompositionScreening",
     "AdsorbateScreening",
     "run_screening",
+    # Exsolution
+    "ExsolutionWorkflow",
+    "ExsolutionScreeningWorkflow",
+    "run_exsolution_study",
 ]

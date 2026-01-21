@@ -22,6 +22,7 @@ Step-by-step guides for common workflows in NH3-SOFC research.
 
 | Tutorial | Description | Time |
 |----------|-------------|------|
+| [Exsolution Simulation](exsolution.md) | Metal nanoparticle exsolution from perovskites | 35 min |
 | [High-Throughput Screening](screening.md) | Systematic parameter scans | 30 min |
 | [MACE ML Force Fields](mace.md) | Training and active learning | 40 min |
 | [Microkinetic Modeling](microkinetics.md) | TOF and steady-state analysis | 35 min |
@@ -115,7 +116,7 @@ All tutorials include complete, runnable code. Download example scripts:
 
 ```bash
 # Clone with examples
-git clone https://github.com/yourusername/NH3SOFC.git
+git clone https://github.com/lizhenzhupearl/nh3sofc.git
 cd NH3SOFC/examples
 ```
 

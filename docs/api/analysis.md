@@ -530,3 +530,204 @@ calculate_tof(
     temperature: float = 673.0
 ) -> float
 ```
+
+---
+
+## ExsolutionEnergetics
+
+Analyze energetics of exsolution processes.
+
+```python
+from nh3sofc.analysis import ExsolutionEnergetics
+```
+
+### Constructor
+
+```python
+ExsolutionEnergetics(
+    metal: str = "Ni",
+    temperature: float = 873.0,
+    p_o2: float = 1e-20
+)
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `metal` | `str` | `"Ni"` | Exsolution metal |
+| `temperature` | `float` | `873.0` | Temperature (K) |
+| `p_o2` | `float` | `1e-20` | O2 partial pressure (atm) |
+
+### Methods
+
+#### set_reference_energies
+
+```python
+set_reference_energies(
+    e_pristine: float = None,
+    e_bulk_metal_per_atom: float = None,
+    e_o2: float = None
+)
+```
+
+Set reference energies for calculations.
+
+#### add_stage
+
+```python
+add_stage(
+    stage: str,
+    energy: float,
+    n_particle_atoms: int = 0,
+    n_o_vacancies: int = 0
+)
+```
+
+Add energy for a calculation stage.
+
+#### get_oxygen_chemical_potential
+
+```python
+get_oxygen_chemical_potential(
+    temperature: float = None,
+    p_o2: float = None
+) -> float
+```
+
+Calculate μ_O(T, p) = 0.5 * [E(O₂) + μ°(T) + kT*ln(p/p°)]
+
+#### calculate_vacancy_formation_energy
+
+```python
+calculate_vacancy_formation_energy(
+    e_defective: float = None,
+    e_pristine: float = None,
+    n_vacancies: int = 1,
+    include_chemical_potential: bool = True
+) -> float
+```
+
+E_vac = [E(defective) - E(pristine) + n * μ_O] / n
+
+#### calculate_segregation_energy
+
+```python
+calculate_segregation_energy(
+    e_segregated: float = None,
+    e_bulk_distributed: float = None
+) -> float
+```
+
+E_seg = E(surface_segregated) - E(bulk_distributed)
+
+#### calculate_exsolution_energy
+
+```python
+calculate_exsolution_energy(
+    e_exsolved: float = None,
+    e_substrate: float = None,
+    n_atoms: int = None,
+    e_bulk_metal: float = None,
+    include_vacancy_correction: bool = True
+) -> float
+```
+
+Calculate exsolution driving force.
+
+#### calculate_particle_binding_energy
+
+```python
+calculate_particle_binding_energy(
+    e_system: float,
+    e_surface: float,
+    e_isolated_particle: float
+) -> float
+```
+
+E_bind = E(particle/surface) - E(surface) - E(isolated_particle)
+
+#### get_exsolution_driving_force
+
+```python
+get_exsolution_driving_force(
+    temperature: float = None,
+    p_o2: float = None
+) -> Dict[str, float]
+```
+
+Calculate T and p dependent driving force.
+
+**Returns:**
+
+```python
+{
+    "delta_G": float,
+    "delta_E": float,
+    "vacancy_term": float,
+    "entropy_term": float,
+    "mu_O": float,
+    "favorable": bool
+}
+```
+
+#### compare_with_clean_surface
+
+```python
+compare_with_clean_surface(
+    exsolved_energies: Dict[str, float],
+    clean_surface_energies: Dict[str, float]
+) -> Dict[str, Any]
+```
+
+Compare catalytic activity of exsolved vs clean surface.
+
+#### print_summary
+
+```python
+print_summary()
+```
+
+Print formatted energetics summary.
+
+**Example:**
+
+```python
+energetics = ExsolutionEnergetics(metal="Ni", temperature=873)
+
+# Set references
+energetics.set_reference_energies(e_pristine=-250.0)
+
+# Add calculation results
+energetics.add_stage("pristine", -250.0)
+energetics.add_stage("defective", -235.0, n_o_vacancies=4)
+energetics.add_stage("exsolved", -265.0, n_particle_atoms=13, n_o_vacancies=4)
+
+# Calculate
+result = energetics.get_exsolution_driving_force()
+print(f"ΔG_exsolution = {result['delta_G']:.2f} eV")
+print(f"Favorable: {result['favorable']}")
+
+energetics.print_summary()
+```
+
+---
+
+## calculate_exsolution_driving_force
+
+Convenience function for quick calculation.
+
+```python
+from nh3sofc.analysis import calculate_exsolution_driving_force
+
+result = calculate_exsolution_driving_force(
+    e_pristine=-250.0,
+    e_exsolved=-265.0,
+    n_particle_atoms=13,
+    metal="Ni",
+    n_o_vacancies=4,
+    temperature=873.0,
+    p_o2=1e-20
+)
+print(f"ΔG = {result['delta_G']:.2f} eV")
+```

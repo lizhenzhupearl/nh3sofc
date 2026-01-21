@@ -44,6 +44,10 @@ from .microkinetic import (
     calculate_tof,
     arrhenius_analysis,
 )
+from .exsolution import (
+    ExsolutionEnergetics,
+    calculate_exsolution_driving_force,
+)
 
 __all__ = [
     # Energetics
@@ -78,4 +82,7 @@ __all__ = [
     "NH3DecompositionModel",
     "calculate_tof",
     "arrhenius_analysis",
+    # Exsolution
+    "ExsolutionEnergetics",
+    "calculate_exsolution_driving_force",
 ]

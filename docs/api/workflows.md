@@ -650,3 +650,244 @@ results = collect_results(
     output_format="dataframe"  # or "dict" or "json"
 )
 ```
+
+---
+
+## ExsolutionWorkflow
+
+Workflow for studying exsolution processes in perovskite materials.
+
+```python
+from nh3sofc.workflows import ExsolutionWorkflow
+```
+
+### Constructor
+
+```python
+ExsolutionWorkflow(
+    atoms: Atoms,
+    work_dir: str,
+    metal: str = "Ni",
+    particle_size: int = 13,
+    vacancy_fraction: float = 0.1,
+    calculator: str = "vasp",
+    **calc_kwargs
+)
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `atoms` | `Atoms` | - | Perovskite surface structure |
+| `work_dir` | `str` | - | Working directory |
+| `metal` | `str` | `"Ni"` | Exsolution metal (Ni, Co, Fe) |
+| `particle_size` | `int` | `13` | Nanoparticle size |
+| `vacancy_fraction` | `float` | `0.1` | Oxygen vacancy concentration |
+| `calculator` | `str` | `"vasp"` | Calculator type |
+
+### Methods
+
+#### generate_pathway_structures
+
+```python
+generate_pathway_structures() -> List[Dict]
+```
+
+Generate structures for all exsolution stages:
+1. Pristine perovskite
+2. Defective (with vacancies)
+3. Surface-segregated
+4. Exsolved nanoparticle
+
+#### setup
+
+```python
+setup() -> Dict[str, Dict[str, Path]]
+```
+
+Set up calculations for all stages.
+
+#### parse_results
+
+```python
+parse_results() -> Dict[str, Any]
+```
+
+Parse results and calculate exsolution energetics.
+
+**Returns:**
+
+```python
+{
+    "pristine": {"energy": ..., "converged": ...},
+    "defective": {"energy": ..., ...},
+    "segregated": {"energy": ..., ...},
+    "exsolved": {"energy": ..., ...},
+    "exsolution_energy": float,  # Calculated driving force
+    "segregation_energy": float,
+    "summary": {...}
+}
+```
+
+#### couple_with_decomposition
+
+```python
+couple_with_decomposition(
+    decomposition_kwargs: Dict = None
+) -> DecompositionWorkflow
+```
+
+Set up NH3 decomposition study on exsolved particle.
+
+**Example:**
+
+```python
+from nh3sofc.structure import BulkStructure, SurfaceBuilder
+from nh3sofc.workflows import ExsolutionWorkflow
+
+# Prepare perovskite surface
+bulk = BulkStructure.from_cif("LaSrTiNiO3.cif")
+surface = SurfaceBuilder(bulk).create_surface((0,0,1), layers=6, vacuum=15)
+
+# Set up exsolution workflow
+wf = ExsolutionWorkflow(
+    atoms=surface.atoms,
+    work_dir="./exsolution_study",
+    metal="Ni",
+    particle_size=13,
+    vacancy_fraction=0.1,
+    hubbard_u={"Ni": 6.2, "Ti": 3.0},
+)
+
+wf.generate_pathway_structures()
+wf.setup()
+
+# After VASP calculations:
+results = wf.parse_results()
+print(f"Exsolution energy: {results['exsolution_energy']:.2f} eV")
+print(f"Favorable: {results['summary']['favorable']}")
+
+# Continue with NH3 decomposition on exsolved particle
+decomp_wf = wf.couple_with_decomposition()
+decomp_wf.setup()
+```
+
+---
+
+## ExsolutionScreeningWorkflow
+
+High-throughput screening for exsolution parameters.
+
+```python
+from nh3sofc.workflows import ExsolutionScreeningWorkflow
+```
+
+### Constructor
+
+```python
+ExsolutionScreeningWorkflow(
+    base_structure: Atoms,
+    parameter_space: Dict[str, List],
+    work_dir: str,
+    calculator: str = "vasp",
+    n_configs_per_combo: int = 1,
+    **calc_kwargs
+)
+```
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `base_structure` | `Atoms` | Base perovskite surface |
+| `parameter_space` | `dict` | Parameters to screen |
+| `work_dir` | `str` | Working directory |
+| `n_configs_per_combo` | `int` | Configurations per combination |
+
+**Parameter space options:**
+
+```python
+parameter_space = {
+    "metal": ["Ni", "Co", "Fe"],
+    "particle_size": [1, 4, 13],
+    "vacancy_fraction": [0.0, 0.05, 0.1]
+}
+```
+
+### Methods
+
+#### generate_all
+
+```python
+generate_all() -> List[Dict]
+```
+
+Generate all parameter combinations.
+
+#### setup_all
+
+```python
+setup_all() -> Dict[str, Dict]
+```
+
+Set up calculations for all configurations.
+
+#### parse_all
+
+```python
+parse_all() -> List[Dict]
+```
+
+Parse all results.
+
+#### get_best_result
+
+```python
+get_best_result(
+    metric: str = "exsolution_energy",
+    minimize: bool = True
+) -> Dict
+```
+
+Get best result by specified metric.
+
+**Example:**
+
+```python
+screening = ExsolutionScreeningWorkflow(
+    base_structure=surface,
+    parameter_space={
+        "metal": ["Ni", "Co", "Fe"],
+        "particle_size": [1, 13],
+        "vacancy_fraction": [0.05, 0.1],
+    },
+    work_dir="./exsolution_screening",
+)
+
+screening.generate_all()
+screening.setup_all()
+
+# After calculations:
+results = screening.parse_all()
+best = screening.get_best_result()
+print(f"Best: {best['config']}")
+```
+
+---
+
+## run_exsolution_study
+
+Convenience function for quick exsolution study setup.
+
+```python
+from nh3sofc.workflows import run_exsolution_study
+
+result = run_exsolution_study(
+    atoms=surface,
+    work_dir="./exsolution",
+    metal="Ni",
+    particle_size=13,
+    calculator="vasp"
+)
+```

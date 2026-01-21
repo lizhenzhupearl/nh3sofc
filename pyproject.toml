@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 authors = [
-    {name = "Zhen Zhu"}
+    {name = "Zhenzhu Li"}
 ]
 keywords = [
     "DFT",
@@ -61,8 +61,8 @@ dev = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/zhenzhu/nh3sofc"
-"Bug Reports" = "https://github.com/zhenzhu/nh3sofc/issues"
+"Homepage" = "https://github.com/lizhenzhupearl/nh3sofc"
+"Bug Reports" = "https://github.com/lizhenzhupearl/nh3sofc/issues"
 
 [project.scripts]
 nh3sofc = "nh3sofc.cli.main:main"

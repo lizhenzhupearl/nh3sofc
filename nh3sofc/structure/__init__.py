@@ -9,6 +9,12 @@ from .decomposition import (
     generate_decomposition_pathway,
     save_decomposition_configs,
 )
+from .exsolution import (
+    ExsolutionBuilder,
+    ExsolutionStructure,
+    generate_exsolution_series,
+    create_metallic_cluster,
+)
 
 __all__ = [
     # Bulk
@@ -29,4 +35,9 @@ __all__ = [
     "DecompositionBuilder",
     "generate_decomposition_pathway",
     "save_decomposition_configs",
+    # Exsolution
+    "ExsolutionBuilder",
+    "ExsolutionStructure",
+    "generate_exsolution_series",
+    "create_metallic_cluster",
 ]

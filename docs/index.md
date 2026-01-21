@@ -42,6 +42,14 @@
 
     [:octicons-arrow-right-24: Database](api/database.md)
 
+-   :material-atom: **Exsolution Simulation**
+
+    ---
+
+    Model metal nanoparticle exsolution from perovskites, including defect formation, segregation, and catalysis on exsolved particles.
+
+    [:octicons-arrow-right-24: Exsolution Tutorial](tutorials/exsolution.md)
+
 </div>
 
 ## Key Features
@@ -62,12 +70,26 @@ The package implements automated workflows for studying the complete NH3 decompo
 NH3(g) → NH3* → NH2* + H* → NH* + 2H* → N* + 3H* → ½N2(g) + 3/2H2(g)
 ```
 
+### Exsolution Simulation
+
+Model the complete exsolution pathway for perovskite materials:
+
+```
+Pristine → Defective → Segregated → Exsolved (with nanoparticle)
+```
+
+- Support for Ni, Co, Fe exsolution from B-site
+- Socketed nanoparticle modeling (realistic anchoring)
+- Oxygen vacancy coupling with metal reduction
+- Multiple adsorption sites: metal top, interface edge, vacancy sites
+
 ### Computational Methods
 
 - **DFT**: VASP with Hubbard U corrections, vdW-D3/D3BJ
 - **ML Force Fields**: MACE foundation models and custom training
 - **Thermochemistry**: ZPE, entropy, Gibbs free energy corrections
 - **Kinetics**: BEP relations, energy span model, microkinetic modeling
+- **Exsolution**: Vacancy formation, segregation, and particle binding energetics
 
 ## Quick Example
 
@@ -141,8 +163,8 @@ If you use this package, please cite:
 ```bibtex
 @software{nh3sofc,
   title = {NH3-SOFC: Automated Simulations for Ammonia Fuel Cell Research},
-  author = {Zhen Zhu},
-  year = {2025},
+  author = {Li, Zhenzhu},
+  year = {2026},
   url = {https://github.com/lizhenzhupearl/nh3sofc}
 }
 ```
