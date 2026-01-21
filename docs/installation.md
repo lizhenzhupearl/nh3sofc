@@ -13,15 +13,16 @@
 | `ase` | ≥3.22.0 | Atomic Simulation Environment |
 | `numpy` | ≥1.21.0 | Numerical computing |
 | `scipy` | ≥1.7.0 | Scientific computing |
+| `torch` | ≥2.0.0 | PyTorch for ML models |
+| `mace-torch` | ≥0.3.0 | MACE ML force field |
+| `spglib` | ≥2.0.0 | Space group analysis |
+| `matplotlib` | ≥3.5.0 | Plotting and visualization |
 
 ### Optional Dependencies
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `mace-torch` | ≥0.3.0 | MACE ML force field |
-| `spglib` | ≥2.0.0 | Space group analysis |
-| `matplotlib` | ≥3.5.0 | Plotting |
-| `pymatgen` | ≥2022.0.0 | Materials analysis (optional) |
+| `pymatgen` | ≥2022.0.0 | Advanced materials analysis |
 
 ## Installation Methods
 
@@ -34,18 +35,29 @@ For active development or to get the latest features:
 git clone https://github.com/lizhenzhupearl/nh3sofc.git
 cd nh3sofc
 
-# Create a virtual environment (optional but recommended)
+# Create a virtual environment (recommended)
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 # or: venv\Scripts\activate  # Windows
 
-# Install in development mode
+# Install PyTorch first (choose one based on your system)
+# CPU version:
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# Or GPU version (CUDA 11.8):
+# pip install torch --index-url https://download.pytorch.org/whl/cu118
+
+# Install nh3sofc with all dependencies
 pip install -e .
 ```
 
 ### Method 2: Direct Install from GitHub
 
 ```bash
+# Install PyTorch first (see above for CPU/GPU options)
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# Install nh3sofc
 pip install git+https://github.com/lizhenzhupearl/nh3sofc.git
 ```
 
@@ -55,31 +67,12 @@ pip install git+https://github.com/lizhenzhupearl/nh3sofc.git
 pip install nh3sofc  # Not yet available
 ```
 
-## Installing Optional Dependencies
+### Installing Optional Dependencies
 
-### For MACE ML Force Fields
-
-```bash
-# Install PyTorch first (CPU version)
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-
-# Or GPU version (CUDA 11.8)
-pip install torch --index-url https://download.pytorch.org/whl/cu118
-
-# Then install MACE
-pip install mace-torch
-```
-
-### For Advanced Analysis
+For advanced materials analysis with pymatgen:
 
 ```bash
-pip install matplotlib spglib pymatgen
-```
-
-### Complete Installation
-
-```bash
-pip install -e ".[all]"
+pip install pymatgen
 ```
 
 ## VASP Configuration
@@ -128,7 +121,30 @@ job = VASPJobScript(
 Run the following to verify your installation:
 
 ```python
-# Test basic imports
+# Test core dependencies
+import numpy as np
+print(f"NumPy version: {np.__version__}")
+
+import scipy
+print(f"SciPy version: {scipy.__version__}")
+
+import ase
+print(f"ASE version: {ase.__version__}")
+
+import torch
+print(f"PyTorch version: {torch.__version__}")
+print(f"CUDA available: {torch.cuda.is_available()}")
+
+import mace
+print(f"MACE-torch: OK")
+
+import spglib
+print(f"spglib version: {spglib.__version__}")
+
+import matplotlib
+print(f"Matplotlib version: {matplotlib.__version__}")
+
+# Test nh3sofc package
 import nh3sofc
 print(f"nh3sofc version: {nh3sofc.__version__ if hasattr(nh3sofc, '__version__') else 'dev'}")
 
@@ -140,6 +156,9 @@ print("Structure module: OK")
 from nh3sofc.calculators.vasp import VASPInputGenerator, VASPOutputParser
 print("VASP calculators: OK")
 
+from nh3sofc.calculators.mace import MACECalculatorWrapper
+print("MACE calculator: OK")
+
 # Test workflows
 from nh3sofc.workflows import RelaxationWorkflow, DecompositionWorkflow
 print("Workflows: OK")
@@ -148,15 +167,7 @@ print("Workflows: OK")
 from nh3sofc.analysis import AdsorptionEnergyCalculator, SurfaceComparator
 print("Analysis: OK")
 
-# Test MACE (optional)
-try:
-    from nh3sofc.calculators.mace import MACECalculatorWrapper
-    wrapper = MACECalculatorWrapper()
-    print(f"MACE available: {wrapper._mace_available}")
-except ImportError:
-    print("MACE: Not installed (optional)")
-
-print("\nInstallation successful!")
+print("\n✓ Installation successful!")
 ```
 
 ## Troubleshooting
@@ -178,12 +189,18 @@ echo $VASP_PP_PATH
 ls $VASP_PP_PATH/potpaw_PBE/
 ```
 
-#### 3. MACE installation fails
+#### 3. MACE or PyTorch installation fails
 
-Install PyTorch separately first:
+Ensure PyTorch is installed first with the correct version for your system:
 
 ```bash
-pip install torch
+# CPU version
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# Or GPU version (CUDA 11.8)
+pip install torch --index-url https://download.pytorch.org/whl/cu118
+
+# Then install MACE
 pip install mace-torch
 ```
 
