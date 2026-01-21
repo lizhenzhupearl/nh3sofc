@@ -59,6 +59,7 @@
 | Material Class | Examples | Focus |
 |---------------|----------|-------|
 | Perovskite Oxynitrides | LaVON₂₋ₓ, LaVO₃ | Primary research target |
+| Exsolution Perovskites | La₀.₄Sr₀.₄Ti₀.₉Ni₀.₁O₃ | Metal nanoparticle catalysis |
 | Mixed Ion Conductors | LSGM, BCZY | Proton/oxide conductors |
 | Cermet Anodes | Ni/YSZ, Ni/GDC | Benchmark materials |
 
