@@ -274,6 +274,7 @@ class SurfaceBuilder:
         vacuum: float = 15.0,
         termination: Optional[int] = None,
         periodic: bool = True,
+        fix_bottom: int = 0,
     ) -> SlabStructure:
         """
         Create a surface slab.
@@ -290,6 +291,8 @@ class SurfaceBuilder:
             Termination index (for multi-termination surfaces)
         periodic : bool
             Whether to make the surface periodic
+        fix_bottom : int
+            Number of bottom layers to fix (constrain). Default is 0 (no fixing).
 
         Returns
         -------
@@ -313,12 +316,18 @@ class SurfaceBuilder:
         if termination is not None:
             term_label = f"term_{termination}"
 
-        return SlabStructure(
+        slab_structure = SlabStructure(
             slab,
             miller_index=miller_index,
             termination=term_label,
             n_layers=layers
         )
+
+        # Fix bottom layers if requested
+        if fix_bottom > 0:
+            slab_structure.fix_bottom_layers(fix_bottom)
+
+        return slab_structure
 
     def create_surface_with_size(
         self,

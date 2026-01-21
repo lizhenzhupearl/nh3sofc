@@ -34,8 +34,7 @@ surface = builder.create_surface(
     miller_index=(0, 0, 1),
     layers=6,
     vacuum=15.0,
-    fix_bottom=2,
-    orthogonal=True
+    fix_bottom=2
 )
 
 print(f"Surface atoms: {len(surface.atoms)}")

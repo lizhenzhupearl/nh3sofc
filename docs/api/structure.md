@@ -103,10 +103,9 @@ SurfaceBuilder(bulk_structure: Union[BulkStructure, Atoms])
 ```python
 create_surface(
     miller_index: tuple,
-    layers: int = 4,
+    layers: int = 6,
     vacuum: float = 15.0,
-    fix_bottom: int = 2,
-    orthogonal: bool = True
+    fix_bottom: int = 0
 ) -> SlabStructure
 ```
 
@@ -117,10 +116,9 @@ Create surface slab.
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `miller_index` | `tuple` | - | Miller indices (h, k, l) |
-| `layers` | `int` | `4` | Number of atomic layers |
+| `layers` | `int` | `6` | Number of atomic layers |
 | `vacuum` | `float` | `15.0` | Vacuum thickness (Å) |
-| `fix_bottom` | `int` | `2` | Layers to fix at bottom |
-| `orthogonal` | `bool` | `True` | Make orthogonal cell |
+| `fix_bottom` | `int` | `0` | Layers to fix at bottom |
 
 **Example:**
 
