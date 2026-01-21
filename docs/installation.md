@@ -31,8 +31,8 @@ For active development or to get the latest features:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/NH3SOFC.git
-cd NH3SOFC
+git clone https://github.com/lizhenzhupearl/nh3sofc.git
+cd nh3sofc
 
 # Create a virtual environment (optional but recommended)
 python -m venv venv
@@ -46,7 +46,7 @@ pip install -e .
 ### Method 2: Direct Install from GitHub
 
 ```bash
-pip install git+https://github.com/yourusername/NH3SOFC.git
+pip install git+https://github.com/lizhenzhupearl/nh3sofc.git
 ```
 
 ### Method 3: Install from PyPI (Future)
@@ -195,7 +195,7 @@ pip install spglib
 
 ### Getting Help
 
-- Open an issue on [GitHub](https://github.com/yourusername/NH3SOFC/issues)
+- Open an issue on [GitHub](https://github.com/lizhenzhupearl/nh3sofc/issues)
 - Check the [FAQ](faq.md)
 
 ## Updating
@@ -203,7 +203,7 @@ pip install spglib
 To update to the latest version:
 
 ```bash
-cd NH3SOFC
+cd nh3sofc
 git pull
 pip install -e .
 ```
