@@ -7,7 +7,7 @@ This tutorial covers building surfaces from bulk structures, handling surface po
 - Load bulk structures from CIF files
 - Generate surface slabs with different Miller indices
 - Handle polar surfaces (critical for perovskites)
-- Use specialized builders for different crystal structures
+- Use the PerovskiteSurfaceBuilder for ABO3 structures
 - Create oxynitride structures with controlled defect concentrations
 
 ## Step 1: Load Bulk Structure
@@ -191,9 +191,9 @@ print(f"Top: {layers[-1]['composition']}")
 print(f"Bottom: {layers[0]['composition']}")
 ```
 
-## Step 4: Specialized Surface Builders
+## Step 4: Perovskite Surface Builder
 
-NH3SOFC provides specialized builders for common crystal structure types:
+NH3SOFC provides a specialized builder for ABO3 perovskite structures:
 
 ### Perovskite Surfaces (ABO3)
 
@@ -247,59 +247,6 @@ print(f"Top: {layers[-1]['composition']}")    # {'V': N, 'O': 2N}
 print(f"Bottom: {layers[0]['composition']}")  # {'V': N, 'O': 2N}
 ```
 
-### Rocksalt Surfaces (MX)
-
-For NiO, MgO, CoO, etc.:
-
-```python
-from nh3sofc.structure import RocksaltSurfaceBuilder
-from ase.build import bulk
-
-# Create NiO bulk
-nio = bulk('NiO', 'rocksalt', a=4.17)
-
-builder = RocksaltSurfaceBuilder(nio, cation="Ni", anion="O")
-
-# (001) and (110) are non-polar
-surface_001 = builder.create_surface(
-    miller_index=(0, 0, 1),
-    layers=6
-)
-
-# (111) is polar - use symmetric slab
-surface_111 = builder.create_surface(
-    miller_index=(1, 1, 1),
-    layers=7,
-    symmetric=True  # Important for polar (111)
-)
-```
-
-### Fluorite Surfaces (MX2)
-
-For CeO2, ZrO2, etc.:
-
-```python
-from nh3sofc.structure import FluoriteSurfaceBuilder
-from ase.build import bulk
-
-# Create CeO2 bulk
-ceo2 = bulk('CeO2', 'fluorite', a=5.41)
-
-builder = FluoriteSurfaceBuilder(ceo2, cation="Ce", anion="O")
-
-# (111) is most stable and non-polar
-surface_111 = builder.create_surface(
-    miller_index=(1, 1, 1),
-    layers=6
-)
-
-# (110) and (100) are polar
-surface_110 = builder.create_surface(
-    miller_index=(1, 1, 0),
-    symmetric=True  # Needed for polar surfaces
-)
-```
-
 ## Step 5: Stoichiometry Validation
 
 Check if your surface has the expected composition:
@@ -335,19 +282,18 @@ defect = DefectBuilder(surface)
 oxynitride = defect.create_oxynitride(
     nitrogen_fraction=0.67,      # 2/3 O → N
     vacancy_concentration=0.10,  # 10% vacancies (x in LaVON2-x)
-    prefer_surface=True          # Preferentially modify surface atoms
 )
 
-print(f"Formula: {oxynitride.atoms.get_chemical_formula()}")
+print(f"Formula: {oxynitride.get_chemical_formula()}")
 ```
 
 ### Create Specific Vacancies
 
 ```python
-# Create oxygen vacancy at specific site
+# Create oxygen vacancies (10% concentration)
 vacancy_structure = defect.create_vacancy(
     element="O",
-    n_vacancies=2
+    concentration=0.1
 )
 ```
 
@@ -360,10 +306,10 @@ from ase.visualize import view
 # Save structures
 write("bulk.xyz", bulk.atoms)
 write("surface.xyz", surface.atoms)
-write("oxynitride.xyz", oxynitride.atoms)
+write("oxynitride.xyz", oxynitride)  # create_oxynitride() returns Atoms directly
 
 # Visualize (if GUI available)
-# view(oxynitride.atoms)
+# view(oxynitride)
 ```
 
 ## Best Practices
@@ -383,10 +329,6 @@ write("oxynitride.xyz", oxynitride.atoms)
 |-------------|----------|----------------|
 | Perovskite (001) | Polar | Use symmetric slab or dipole correction |
 | Perovskite (110) | Polar | Use symmetric slab |
-| Rocksalt (001) | Non-polar | Standard slab OK |
-| Rocksalt (111) | Polar | Use symmetric slab |
-| Fluorite (111) | Non-polar | Standard slab OK |
-| Fluorite (110) | Polar | Use symmetric slab |
 
 ### VASP Settings for Polar Surfaces
 
@@ -428,19 +370,18 @@ surface = builder.create_surface(
 polarity = surface.check_polarity()
 print(f"Dipole: {polarity['dipole_z']:.2f} e·Å")
 
-# 4. Create oxynitride
+# 4. Create oxynitride (returns Atoms directly)
 defect = DefectBuilder(surface)
 oxynitride = defect.create_oxynitride(
     nitrogen_fraction=0.67,
     vacancy_concentration=0.10,
 )
 
-# 5. Validate stoichiometry
-stoich = oxynitride.check_stoichiometry()
-print(f"Final composition: {oxynitride.formula}")
+# 5. Check composition
+print(f"Final composition: {oxynitride.get_chemical_formula()}")
 
 # 6. Save
-write("LaVON2_001_symmetric.xyz", oxynitride.atoms)
+write("LaVON2_001_symmetric.xyz", oxynitride)
 ```
 
 ## Next Steps

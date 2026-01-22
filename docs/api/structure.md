@@ -307,103 +307,6 @@ Analyze surface for termination, polarity, and stoichiometry.
 
 ---
 
-## RocksaltSurfaceBuilder
-
-Specialized builder for rocksalt MX surfaces (NiO, MgO, etc.).
-
-```python
-from nh3sofc.structure import RocksaltSurfaceBuilder
-```
-
-### Constructor
-
-```python
-RocksaltSurfaceBuilder(
-    bulk: Union[BulkStructure, Atoms],
-    cation: str = None,
-    anion: str = "O"
-)
-```
-
-### Methods
-
-#### create_surface
-
-```python
-create_surface(
-    miller_index: tuple,
-    termination: str = None,
-    layers: int = 6,
-    vacuum: float = 15.0,
-    symmetric: bool = False,
-    fix_bottom: int = 2,
-    supercell: tuple = None
-) -> SlabStructure
-```
-
-Create rocksalt surface. Use `symmetric=True` for polar (111) surfaces.
-
-**Example:**
-
-```python
-from ase.build import bulk
-nio = bulk('NiO', 'rocksalt', a=4.17)
-
-builder = RocksaltSurfaceBuilder(nio, cation="Ni")
-slab_001 = builder.create_surface(miller_index=(0, 0, 1))  # Non-polar
-slab_111 = builder.create_surface(miller_index=(1, 1, 1), symmetric=True)  # Polar
-```
-
----
-
-## FluoriteSurfaceBuilder
-
-Specialized builder for fluorite MX2 surfaces (CeO2, ZrO2, etc.).
-
-```python
-from nh3sofc.structure import FluoriteSurfaceBuilder
-```
-
-### Constructor
-
-```python
-FluoriteSurfaceBuilder(
-    bulk: Union[BulkStructure, Atoms],
-    cation: str = None,
-    anion: str = "O"
-)
-```
-
-### Methods
-
-#### create_surface
-
-```python
-create_surface(
-    miller_index: tuple,
-    termination: str = None,
-    layers: int = 6,
-    vacuum: float = 15.0,
-    symmetric: bool = False,
-    fix_bottom: int = 2,
-    supercell: tuple = None
-) -> SlabStructure
-```
-
-Create fluorite surface. (111) is most stable and non-polar.
-
-**Example:**
-
-```python
-from ase.build import bulk
-ceo2 = bulk('CeO2', 'fluorite', a=5.41)
-
-builder = FluoriteSurfaceBuilder(ceo2, cation="Ce")
-slab_111 = builder.create_surface(miller_index=(1, 1, 1))  # Most stable
-```
-
----
-
 ## DefectBuilder
 
 Create point defects and oxynitride structures.
@@ -415,7 +318,7 @@ from nh3sofc.structure import DefectBuilder
 ### Constructor
 
 ```python
-DefectBuilder(atoms: Atoms, seed: int = None)
+DefectBuilder(structure: Union[SlabStructure, Atoms])
 ```
 
 ### Methods
@@ -424,10 +327,11 @@ DefectBuilder(atoms: Atoms, seed: int = None)
 
 ```python
 create_oxynitride(
-    nitrogen_fraction: float = 0.5,
+    nitrogen_fraction: float = 0.67,
     vacancy_concentration: float = 0.0,
-    prefer_surface: bool = True
-) -> OxynitrideStructure
+    vacancy_element: str = "N",
+    random_seed: int = None
+) -> Atoms
 ```
 
 Create oxynitride by substituting O with N and creating vacancies.
@@ -436,9 +340,10 @@ Create oxynitride by substituting O with N and creating vacancies.
 
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
-| `nitrogen_fraction` | `float` | `0.5` | Fraction of O to replace with N |
-| `vacancy_concentration` | `float` | `0.0` | Fraction of O/N to remove |
-| `prefer_surface` | `bool` | `True` | Preferentially modify surface atoms |
+| `nitrogen_fraction` | `float` | `0.67` | Fraction of O to replace with N |
+| `vacancy_concentration` | `float` | `0.0` | Fraction of anion sites to leave vacant |
+| `vacancy_element` | `str` | `"N"` | Element to create vacancies in ("N" or "O") |
+| `random_seed` | `int` | `None` | Random seed for reproducibility |
 
 **Example:**
 
@@ -448,7 +353,7 @@ oxynitride = defect.create_oxynitride(
     nitrogen_fraction=0.67,      # 2/3 O → N
     vacancy_concentration=0.10   # 10% vacancies
 )
-print(f"Formula: {oxynitride.atoms.get_chemical_formula()}")
+print(f"Formula: {oxynitride.get_chemical_formula()}")  # Returns Atoms directly
 ```
 
 #### create_vacancy
@@ -456,11 +361,22 @@ print(f"Formula: {oxynitride.atoms.get_chemical_formula()}")
 ```python
 create_vacancy(
     element: str,
-    n_vacancies: int = 1
+    concentration: float,
+    indices: List[int] = None,
+    random_seed: int = None
 ) -> Atoms
 ```
 
-Create point vacancies.
+Create vacancies by removing atoms.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `element` | `str` | - | Element to remove (e.g., "O") |
+| `concentration` | `float` | - | Fraction of atoms to remove (0.0 to 1.0) |
+| `indices` | `List[int]` | `None` | Specific indices to remove (if None, random selection) |
+| `random_seed` | `int` | `None` | Random seed for reproducibility |
 
 ---
 

@@ -173,24 +173,6 @@ class TestSpecializedBuildersAutoDetect:
         assert builder.A_site == 'La', f"Expected La, got {builder.A_site}"
         assert builder.B_site == 'V', f"Expected V, got {builder.B_site}"
 
-    def test_rocksalt_auto_detects_cation(self, rocksalt_bulk):
-        """RocksaltSurfaceBuilder should auto-detect cation."""
-        from nh3sofc.structure import RocksaltSurfaceBuilder
-
-        builder = RocksaltSurfaceBuilder(rocksalt_bulk)
-
-        assert builder.cation == 'Ni', f"Expected Ni, got {builder.cation}"
-        assert builder.anion == 'O', f"Expected O, got {builder.anion}"
-
-    def test_fluorite_auto_detects_cation(self, fluorite_bulk):
-        """FluoriteSurfaceBuilder should auto-detect cation."""
-        from nh3sofc.structure import FluoriteSurfaceBuilder
-
-        builder = FluoriteSurfaceBuilder(fluorite_bulk)
-
-        assert builder.cation == 'Ce', f"Expected Ce, got {builder.cation}"
-        assert builder.anion == 'O', f"Expected O, got {builder.anion}"
-
 
 class TestLayerToleranceAutoCalculation:
     """

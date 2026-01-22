@@ -16,11 +16,7 @@ class TestImports:
         )
 
     def test_import_specialized_builders(self):
-        from nh3sofc.structure import (
-            PerovskiteSurfaceBuilder,
-            RocksaltSurfaceBuilder,
-            FluoriteSurfaceBuilder,
-        )
+        from nh3sofc.structure import PerovskiteSurfaceBuilder
 
     def test_import_calculators(self):
         from nh3sofc.calculators.vasp import VASPInputGenerator
@@ -47,18 +43,6 @@ class TestBasicInstantiation:
         # Should auto-detect La as A-site, V as B-site
         assert builder.A_site == 'La'
         assert builder.B_site == 'V'
-
-    def test_rocksalt_builder(self, rocksalt_bulk):
-        from nh3sofc.structure import RocksaltSurfaceBuilder
-        builder = RocksaltSurfaceBuilder(rocksalt_bulk)
-        assert builder.cation == 'Ni'
-        assert builder.anion == 'O'
-
-    def test_fluorite_builder(self, fluorite_bulk):
-        from nh3sofc.structure import FluoriteSurfaceBuilder
-        builder = FluoriteSurfaceBuilder(fluorite_bulk)
-        assert builder.cation == 'Ce'
-        assert builder.anion == 'O'
 
     def test_adsorbate_placer(self, simple_slab):
         from nh3sofc.structure import AdsorbatePlacer
