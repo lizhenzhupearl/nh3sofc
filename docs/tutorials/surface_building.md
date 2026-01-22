@@ -95,11 +95,20 @@ print(f"Recommendation: {polarity['recommendation']}")
 ### Analyze Layers
 
 ```python
-# Identify atomic layers
-layers = surface.identify_layers(tolerance=0.5)
+# Identify atomic layers (uses automatic tolerance based on covalent radii)
+layers = surface.identify_layers()  # tolerance="auto" by default
 
 for i, layer in enumerate(layers):
     print(f"Layer {i}: z={layer['z']:.2f} Å, composition={layer['composition']}")
+
+# Check what tolerance was calculated
+tol = surface.estimate_layer_tolerance()
+print(f"Auto-calculated tolerance: {tol:.2f} Å")
+
+# For complex materials like perovskites, auto tolerance correctly groups
+# atoms that belong to the same layer (e.g., V and O in VO2 layers)
+# You can override with explicit tolerance if needed:
+layers_custom = surface.identify_layers(tolerance=0.5)
 
 # Get layer spacing
 spacings = surface.get_layer_spacing()
@@ -108,20 +117,76 @@ print(f"Interlayer distances: {spacings}")
 
 ### Create Symmetric Slabs
 
-For polar surfaces, symmetric slabs (same termination on both sides) help cancel the dipole:
+For polar surfaces, symmetric slabs (same termination on both sides) help cancel the dipole. NH3SOFC creates truly symmetric slabs by trimming to matching top/bottom layer compositions:
 
 ```python
-# Create symmetric slab
+# Create symmetric slab (automatically trims to matching terminations)
 symmetric_surface = builder.create_symmetric_slab(
     miller_index=(0, 0, 1),
-    layers=7,  # Odd number recommended
+    layers=7,
     vacuum=15.0,
     fix_bottom=2
 )
 
-# Verify symmetry
+# Verify top and bottom layers match
+layers = symmetric_surface.identify_layers()
+print(f"Top layer: {layers[-1]['composition']}")
+print(f"Bottom layer: {layers[0]['composition']}")
+
+# Verify reduced dipole
 polarity = symmetric_surface.check_polarity()
 print(f"Dipole after symmetrization: {polarity['dipole_z']:.2f} e·Å")
+```
+
+#### Requesting Specific Terminations
+
+You can request a specific termination for your symmetric slab:
+
+```python
+# Create LaO-terminated symmetric slab
+lao_symmetric = builder.create_symmetric_slab(
+    miller_index=(0, 0, 1),
+    layers=7,
+    vacuum=15.0,
+    termination={"La": 1, "O": 1},  # LaO composition ratio
+    min_layers=5,
+    fix_bottom=2
+)
+
+# Create VO2-terminated symmetric slab
+vo2_symmetric = builder.create_symmetric_slab(
+    miller_index=(0, 0, 1),
+    layers=7,
+    vacuum=15.0,
+    termination={"V": 1, "O": 2},  # VO2 composition ratio
+    min_layers=5,
+    fix_bottom=2
+)
+```
+
+#### Manual Trimming for Fine Control
+
+For more control, you can create an oversized slab and trim it yourself:
+
+```python
+# Create oversized slab
+oversized = builder.create_surface(
+    miller_index=(0, 0, 1),
+    layers=12,
+    vacuum=15.0
+)
+
+# Trim to symmetric LaO termination
+symmetric = oversized.trim_to_symmetric_termination(
+    termination={"La": 1, "O": 1},
+    min_layers=5
+)
+
+# Verify the result
+layers = symmetric.identify_layers()
+print(f"Total layers: {len(layers)}")
+print(f"Top: {layers[-1]['composition']}")
+print(f"Bottom: {layers[0]['composition']}")
 ```
 
 ## Step 4: Specialized Surface Builders
@@ -147,7 +212,7 @@ print(builder.get_termination_options((0, 0, 1)))  # ['LaO', 'VO2']
 # Create surface with specific termination
 surface = builder.create_surface(
     miller_index=(0, 0, 1),
-    termination="LaO",      # Named termination
+    termination="LaO",      # Named termination (also accepts "AO" or "BO2")
     layers=7,
     symmetric=True,         # Symmetric slab (recommended for polar surfaces)
     fix_bottom=2,
@@ -158,6 +223,26 @@ surface = builder.create_surface(
 analysis = builder.analyze_surface(surface)
 print(f"Termination: {analysis['termination_type']}")
 print(f"Surface composition: {analysis['surface_composition']}")
+```
+
+When `symmetric=True`, the builder creates a truly symmetric slab where both top and bottom layers have the same composition. For example, with `termination="LaO"`:
+
+```python
+# Verify both surfaces are LaO-terminated
+layers = surface.identify_layers()
+print(f"Top layer: {layers[-1]['composition']}")     # {'La': N, 'O': N}
+print(f"Bottom layer: {layers[0]['composition']}")   # {'La': N, 'O': N}
+
+# VO2 termination works the same way
+vo2_surface = builder.create_surface(
+    miller_index=(0, 0, 1),
+    termination="VO2",
+    layers=7,
+    symmetric=True
+)
+layers = vo2_surface.identify_layers()
+print(f"Top: {layers[-1]['composition']}")    # {'V': N, 'O': 2N}
+print(f"Bottom: {layers[0]['composition']}")  # {'V': N, 'O': 2N}
 ```
 
 ### Rocksalt Surfaces (MX)
@@ -288,6 +373,7 @@ write("oxynitride.xyz", oxynitride.atoms)
 3. **Sufficient layers** - Use at least 5-7 layers for accurate surface properties
 4. **Vacuum spacing** - 15-20 Å is typically sufficient to avoid image interactions
 5. **Fix bottom atoms** - Fix 2-3 bottom layers to simulate bulk behavior
+6. **Layer identification** - Use `identify_layers()` with default auto-tolerance; it correctly groups atoms in complex materials like perovskites where atoms in the same layer may have slightly different z-positions
 
 ### Polarity Handling
 
