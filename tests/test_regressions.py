@@ -481,15 +481,17 @@ class TestPOSCARStandardFormat:
         configs = [simple_slab, simple_slab.copy()]
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            paths = save_configurations(
+            result = save_configurations(
                 configs,
                 tmpdir,
                 name_prefix="config",
                 formats=["poscar", "cif"]
             )
 
-            assert len(paths) == 2
-            for p in paths:
+            assert "work_dir" in result
+            assert "configs" in result
+            assert len(result["configs"]) == 2
+            for p in result["configs"]:
                 assert "poscar" in p
                 assert "cif" in p
                 assert p["poscar"].exists()
@@ -503,5 +505,53 @@ class TestPOSCARStandardFormat:
             work_dir = f"{tmpdir}/new_subdir/configs"
             paths = save_structure(simple_slab, work_dir, "test_struct")
 
+            assert "work_dir" in paths
             assert paths["poscar"].exists()
             assert paths["poscar"].parent == Path(work_dir)
+
+    def test_save_structure_auto_generates_work_dir(self, simple_slab):
+        """save_structure should auto-generate meaningful work_dir when not provided."""
+        from nh3sofc import save_structure
+        import os
+
+        # Change to temp directory to avoid polluting cwd
+        original_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.chdir(tmpdir)
+            try:
+                paths = save_structure(simple_slab, name="test_struct")
+
+                # Should have auto-generated work_dir
+                assert "work_dir" in paths
+                assert paths["work_dir"].exists()
+                assert paths["poscar"].exists()
+
+                # Work dir name should contain formula info
+                work_dir_name = paths["work_dir"].name
+                assert "atoms" in work_dir_name  # Should have atom count
+            finally:
+                os.chdir(original_cwd)
+
+    def test_save_configurations_auto_generates_work_dir(self, simple_slab):
+        """save_configurations should auto-generate work_dir when not provided."""
+        from nh3sofc import save_configurations
+        import os
+
+        configs = [simple_slab, simple_slab.copy()]
+
+        original_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.chdir(tmpdir)
+            try:
+                result = save_configurations(configs, name_prefix="config")
+
+                # Should have auto-generated work_dir
+                assert "work_dir" in result
+                assert result["work_dir"].exists()
+                assert len(result["configs"]) == 2
+
+                # All configs should be saved
+                for p in result["configs"]:
+                    assert p["poscar"].exists()
+            finally:
+                os.chdir(original_cwd)

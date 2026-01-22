@@ -183,12 +183,14 @@ v_configs = placer.add_on_site("NH3", site_type="ontop", atom_types=["V"])
 # Combine all configs
 all_configs = la_configs + v_configs
 
-# Save all configurations (atoms sorted by element automatically)
-work_dir = "work/adsorbates/NH3_on_LaVO3_001"
-paths = save_configurations(all_configs, work_dir, name_prefix="config")
+# Option 1: Auto-generate work directory (creates folder like "work/slab_H3La8N1V8O24_44atoms/")
+result = save_configurations(all_configs, name_prefix="config", prefix="NH3_adsorption")
+print(f"Saved to: {result['work_dir']}")
+
+# Option 2: Specify work directory explicitly
+result = save_configurations(all_configs, "work/adsorbates/NH3_on_LaVO3_001", name_prefix="config")
 
 print(f"Generated {len(all_configs)} configurations")
-print(f"Saved to: {work_dir}")
 # Creates: config_001.vasp, config_002.vasp, ...
 ```
 

@@ -16,6 +16,7 @@ from .core.io import (
     save_structure,
     save_configurations,
     sort_atoms_by_element,
+    generate_work_dir,
 )
 
 __all__ = [
@@ -27,4 +28,5 @@ __all__ = [
     "save_structure",
     "save_configurations",
     "sort_atoms_by_element",
+    "generate_work_dir",
 ]
