@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Optional, List, Union, Tuple, Dict
+from ase.data import covalent_radii, atomic_numbers
 import numpy as np
 from ase import Atoms
 from ase.build import surface, add_vacuum
@@ -152,17 +153,61 @@ class SlabStructure(BaseStructure):
 
     # ========== Layer Analysis Methods ==========
 
+    def estimate_layer_tolerance(self, bond_scale: float = 0.5) -> float:
+        """
+        Estimate layer tolerance from covalent radii.
+
+        Calculates a tolerance based on the minimum expected bond length
+        in the structure. This is useful for complex materials like perovskites
+        where atoms in the same layer may have different z-positions.
+
+        Parameters
+        ----------
+        bond_scale : float
+            Fraction of minimum bond length to use as tolerance (default: 0.5)
+
+        Returns
+        -------
+        float
+            Estimated tolerance in Angstrom
+
+        Examples
+        --------
+        >>> slab.estimate_layer_tolerance()
+        1.1  # For LaVO3 (V-O bond ~2.19 A, tolerance ~1.1 A)
+        """
+        symbols = self.atoms.get_chemical_symbols()
+        unique_symbols = list(set(symbols))
+
+        # Get covalent radii for all elements
+        radii = {}
+        for sym in unique_symbols:
+            radii[sym] = covalent_radii[atomic_numbers[sym]]
+
+        # Find minimum bond length (sum of two smallest radii)
+        radii_list = list(radii.values())
+        if len(radii_list) >= 2:
+            sorted_radii = sorted(radii_list)
+            min_bond = sorted_radii[0] + sorted_radii[1]
+        else:
+            min_bond = 2 * radii_list[0] if radii_list else 2.0
+
+        return bond_scale * min_bond
+
     def identify_layers(
         self,
-        tolerance: float = 0.5,
+        tolerance: Union[float, str] = "auto",
     ) -> List[Dict]:
         """
         Identify atomic layers in the slab based on z-positions.
 
         Parameters
         ----------
-        tolerance : float
-            Z-distance tolerance for layer clustering (Angstrom)
+        tolerance : float or "auto"
+            Z-distance tolerance for layer clustering (Angstrom).
+            If "auto", calculates tolerance from covalent radii using
+            estimate_layer_tolerance(). Default is "auto" to correctly
+            group atoms in complex materials like perovskites.
 
         Returns
         -------
@@ -174,7 +219,16 @@ class SlabStructure(BaseStructure):
                 "symbols": [chemical symbols],
                 "composition": {"La": 2, "O": 2},
             }, ...]
+
+        Examples
+        --------
+        >>> layers = slab.identify_layers()  # auto tolerance
+        >>> layers = slab.identify_layers(tolerance=0.5)  # explicit tolerance
         """
+        # Handle auto tolerance
+        if tolerance == "auto":
+            tolerance = self.estimate_layer_tolerance()
+
         z_positions = self.atoms.positions[:, 2]
         symbols = self.atoms.get_chemical_symbols()
 
@@ -235,12 +289,12 @@ class SlabStructure(BaseStructure):
             spacings.append(spacing)
         return spacings
 
-    def get_top_layer(self, tolerance: float = 0.5) -> Dict:
+    def get_top_layer(self, tolerance: Union[float, str] = "auto") -> Dict:
         """Get the topmost layer."""
         layers = self.identify_layers(tolerance)
         return layers[-1] if layers else {}
 
-    def get_bottom_layer(self, tolerance: float = 0.5) -> Dict:
+    def get_bottom_layer(self, tolerance: Union[float, str] = "auto") -> Dict:
         """Get the bottommost layer."""
         layers = self.identify_layers(tolerance)
         return layers[0] if layers else {}
@@ -250,7 +304,7 @@ class SlabStructure(BaseStructure):
     def calculate_layer_charges(
         self,
         formal_charges: Optional[Dict[str, float]] = None,
-        tolerance: float = 0.5,
+        tolerance: Union[float, str] = "auto",
     ) -> List[Dict]:
         """
         Calculate formal charges per atomic layer.
@@ -260,7 +314,7 @@ class SlabStructure(BaseStructure):
         formal_charges : dict, optional
             Formal charges by element (e.g., {"La": +3, "V": +5, "O": -2}).
             If None, uses DEFAULT_FORMAL_CHARGES.
-        tolerance : float
+        tolerance : float or "auto"
             Z-distance tolerance for layer detection (Angstrom)
 
         Returns
@@ -334,7 +388,7 @@ class SlabStructure(BaseStructure):
     def check_polarity(
         self,
         formal_charges: Optional[Dict[str, float]] = None,
-        tolerance: float = 0.5,
+        tolerance: Union[float, str] = "auto",
     ) -> Dict:
         """
         Check if surface is polar (has net dipole in z-direction).
@@ -343,7 +397,7 @@ class SlabStructure(BaseStructure):
         ----------
         formal_charges : dict, optional
             Formal charges by element.
-        tolerance : float
+        tolerance : float or "auto"
             Layer detection tolerance.
 
         Returns
@@ -487,7 +541,7 @@ class SlabStructure(BaseStructure):
             "warnings": warnings,
         }
 
-    def get_layer_stoichiometry(self, tolerance: float = 0.5) -> List[Dict]:
+    def get_layer_stoichiometry(self, tolerance: Union[float, str] = "auto") -> List[Dict]:
         """
         Get stoichiometry per layer.
 
@@ -513,6 +567,192 @@ class SlabStructure(BaseStructure):
                 layer["stoichiometry"] = {}
 
         return layers
+
+    # ========== Symmetric Slab Methods ==========
+
+    def _composition_matches_ratio(
+        self, layer_comp: Dict[str, int], target: Dict[str, int]
+    ) -> bool:
+        """
+        Check if a layer composition matches a target by element ratio.
+
+        Parameters
+        ----------
+        layer_comp : dict
+            Layer composition (e.g., {"V": 8, "O": 16})
+        target : dict
+            Target composition ratio (e.g., {"V": 1, "O": 2})
+
+        Returns
+        -------
+        bool
+            True if element ratios match
+        """
+        if not layer_comp or not target:
+            return False
+
+        # Must have exactly the same elements
+        if set(layer_comp.keys()) != set(target.keys()):
+            return False
+
+        # Calculate ratios for both
+        layer_min = min(layer_comp.values())
+        target_min = min(target.values())
+
+        layer_ratio = {k: v / layer_min for k, v in layer_comp.items()}
+        target_ratio = {k: v / target_min for k, v in target.items()}
+
+        # Check if ratios match (within tolerance)
+        for elem in layer_ratio:
+            if abs(layer_ratio[elem] - target_ratio[elem]) > 0.1:
+                return False
+        return True
+
+    def _find_matching_layers(
+        self, layers: List[Dict], termination: Dict[str, int]
+    ) -> List[int]:
+        """
+        Find layer indices that match the target termination.
+
+        Parameters
+        ----------
+        layers : list of dict
+            Layer info from identify_layers()
+        termination : dict
+            Target termination composition (e.g., {"La": 1, "O": 1})
+
+        Returns
+        -------
+        list of int
+            Indices of matching layers (sorted by z from bottom to top)
+        """
+        matching = []
+        for i, layer in enumerate(layers):
+            if self._composition_matches_ratio(layer["composition"], termination):
+                matching.append(i)
+        return matching
+
+    def trim_to_symmetric_termination(
+        self,
+        termination: Optional[Dict[str, int]] = None,
+        termination_name: Optional[str] = None,
+        min_layers: int = 5,
+        tolerance: Union[float, str] = "auto",
+    ) -> "SlabStructure":
+        """
+        Trim slab to ensure matching top/bottom terminations.
+
+        Creates a truly symmetric slab by finding layers that match the
+        target termination and trimming to the outermost matching layers.
+
+        Parameters
+        ----------
+        termination : dict, optional
+            Target termination composition as element ratios
+            (e.g., {"La": 1, "O": 1} for LaO or {"V": 1, "O": 2} for VO2).
+            If None, uses the top layer's composition as target.
+        termination_name : str, optional
+            Name for the termination (e.g., "LaO", "VO2")
+        min_layers : int
+            Minimum number of layers to keep (default: 5)
+        tolerance : float or "auto"
+            Layer detection tolerance
+
+        Returns
+        -------
+        SlabStructure
+            New slab with matching top/bottom terminations
+
+        Examples
+        --------
+        >>> # Create LaO-terminated symmetric slab
+        >>> symmetric = slab.trim_to_symmetric_termination(
+        ...     termination={"La": 1, "O": 1}, min_layers=5
+        ... )
+        >>> layers = symmetric.identify_layers()
+        >>> print(layers[0]["composition"])  # Bottom: LaO
+        >>> print(layers[-1]["composition"])  # Top: also LaO
+        """
+        layers = self.identify_layers(tolerance)
+
+        if len(layers) < min_layers:
+            raise ValueError(
+                f"Slab has only {len(layers)} layers, need at least {min_layers} "
+                "for symmetric trimming. Create a larger slab first."
+            )
+
+        # If no termination specified, use top layer composition as target
+        if termination is None:
+            termination = layers[-1]["composition"]
+
+        # Find layers matching the target termination
+        matching = self._find_matching_layers(layers, termination)
+
+        if len(matching) < 2:
+            raise ValueError(
+                f"Found only {len(matching)} layers matching termination {termination}. "
+                "Need at least 2 (one for top, one for bottom). "
+                "Try a different termination or larger slab."
+            )
+
+        # Find the best top/bottom pair with at least min_layers between them
+        best_bottom = None
+        best_top = None
+        best_n_layers = 0
+
+        for bottom_idx in matching:
+            for top_idx in reversed(matching):
+                if top_idx <= bottom_idx:
+                    continue
+                n_layers = top_idx - bottom_idx + 1
+                if n_layers >= min_layers and n_layers > best_n_layers:
+                    best_bottom = bottom_idx
+                    best_top = top_idx
+                    best_n_layers = n_layers
+                    break  # Found best top for this bottom
+
+        if best_bottom is None or best_top is None:
+            # Try with relaxed min_layers
+            for bottom_idx in matching:
+                for top_idx in reversed(matching):
+                    if top_idx > bottom_idx:
+                        best_bottom = bottom_idx
+                        best_top = top_idx
+                        best_n_layers = top_idx - bottom_idx + 1
+                        break
+                if best_bottom is not None:
+                    break
+
+        if best_bottom is None or best_top is None:
+            raise ValueError(
+                f"Could not find valid top/bottom pair with termination {termination}. "
+                f"Matching layers: {matching}"
+            )
+
+        # Get atom indices to keep (all atoms in layers from bottom to top inclusive)
+        keep_indices = []
+        for i in range(best_bottom, best_top + 1):
+            keep_indices.extend(layers[i]["indices"])
+
+        # Create new slab with only the selected atoms
+        new_atoms = self.atoms[keep_indices]
+        new_atoms.center(axis=2)
+
+        # Determine termination name
+        if termination_name is None:
+            # Try to generate from composition
+            parts = [f"{elem}{count}" if count > 1 else elem
+                     for elem, count in sorted(termination.items())]
+            termination_name = "".join(parts)
+
+        new_slab = SlabStructure(
+            new_atoms,
+            miller_index=self.miller_index,
+            termination=f"{termination_name}_symmetric",
+            n_layers=best_n_layers,
+        )
+
+        return new_slab
 
     def add_vacuum(self, vacuum: float) -> "SlabStructure":
         """
@@ -848,64 +1088,103 @@ class SurfaceBuilder:
         miller_index: Tuple[int, int, int],
         layers: int = 7,
         vacuum: float = 15.0,
+        termination: Optional[Dict[str, int]] = None,
+        min_layers: int = 5,
         fix_bottom: int = 2,
+        tolerance: Union[float, str] = "auto",
     ) -> SlabStructure:
         """
         Create a symmetric slab with same termination on top and bottom.
 
-        For polar surfaces, this helps cancel the dipole moment.
+        Creates an oversized slab and trims it to ensure the top and bottom
+        layers have matching compositions. This is essential for polar
+        surfaces to cancel the dipole moment.
 
         Parameters
         ----------
         miller_index : tuple
             Miller indices (h, k, l)
         layers : int
-            Number of layers (should be odd for most symmetric slabs)
+            Target number of layers (actual may differ slightly to achieve symmetry)
         vacuum : float
             Vacuum thickness in Angstrom
+        termination : dict, optional
+            Target termination composition as element ratios
+            (e.g., {"La": 1, "O": 1} for LaO-terminated).
+            If None, uses the top layer composition of the initial slab.
+        min_layers : int
+            Minimum number of layers to keep (default: 5)
         fix_bottom : int
             Number of bottom layers to fix
+        tolerance : float or "auto"
+            Layer detection tolerance
 
         Returns
         -------
         SlabStructure
-            Symmetric slab
+            Symmetric slab with matching top/bottom terminations
 
         Notes
         -----
-        For perovskites (ABO3) along (001):
-        - Odd layers give AO-BO2-AO-BO2-AO (same termination top/bottom)
-        - Even layers give AO-BO2-AO-BO2 (different terminations)
+        For perovskites (ABO3) along (001), you can request either:
+        - AO termination: termination={"La": 1, "O": 1}
+        - BO2 termination: termination={"V": 1, "O": 2}
+
+        Examples
+        --------
+        >>> builder = SurfaceBuilder(bulk)
+        >>> # LaO-terminated symmetric slab
+        >>> slab = builder.create_symmetric_slab(
+        ...     (0, 0, 1), layers=7,
+        ...     termination={"La": 1, "O": 1}
+        ... )
         """
-        # Ensure odd number of layers for symmetric terminations
-        if layers % 2 == 0:
-            layers += 1
+        # Create oversized slab to have enough layers for trimming
+        oversized_layers = max(layers + 4, 10)
 
         # Use base SurfaceBuilder.create_surface to avoid recursion in subclasses
-        slab = SurfaceBuilder.create_surface(
+        oversized = SurfaceBuilder.create_surface(
             self,
             miller_index=miller_index,
-            layers=layers,
+            layers=oversized_layers,
             vacuum=vacuum,
-            fix_bottom=fix_bottom,
+            fix_bottom=0,  # Will apply constraints after trimming
         )
 
-        # Verify symmetry
-        polarity = slab.check_polarity()
-        if polarity["is_polar"] and abs(polarity["dipole_z"]) > 1.0:
-            # Try adding one more layer
-            slab2 = SurfaceBuilder.create_surface(
+        # Trim to symmetric termination
+        try:
+            slab = oversized.trim_to_symmetric_termination(
+                termination=termination,
+                min_layers=min_layers,
+                tolerance=tolerance,
+            )
+        except ValueError:
+            # Fallback: try with even larger slab
+            oversized = SurfaceBuilder.create_surface(
                 self,
                 miller_index=miller_index,
-                layers=layers + 1,
+                layers=oversized_layers + 4,
                 vacuum=vacuum,
-                fix_bottom=fix_bottom,
+                fix_bottom=0,
             )
-            polarity2 = slab2.check_polarity()
-            if abs(polarity2["dipole_z"]) < abs(polarity["dipole_z"]):
-                slab = slab2
+            slab = oversized.trim_to_symmetric_termination(
+                termination=termination,
+                min_layers=min_layers,
+                tolerance=tolerance,
+            )
 
-        slab.termination = "symmetric"
+        # Add vacuum and center
+        slab = slab.add_vacuum(vacuum)
+        slab = slab.center_in_cell()
+
+        # Set termination name (use "symmetric" if no specific termination was requested)
+        if termination is None:
+            slab.termination = "symmetric"
+
+        # Apply constraints
+        if fix_bottom > 0:
+            slab.fix_bottom_layers(fix_bottom)
+
         return slab
 
 
@@ -1007,6 +1286,34 @@ class PerovskiteSurfaceBuilder(SurfaceBuilder):
         else:
             return ["term_0", "term_1"]
 
+    def _get_termination_composition(
+        self, termination: Optional[str]
+    ) -> Optional[Dict[str, int]]:
+        """
+        Convert named termination to composition dict.
+
+        Parameters
+        ----------
+        termination : str or None
+            Named termination (e.g., "LaO", "VO2")
+
+        Returns
+        -------
+        dict or None
+            Composition as element ratios (e.g., {"La": 1, "O": 1})
+        """
+        if termination is None:
+            return None
+
+        # AO termination (e.g., LaO)
+        if termination == f"{self.A_site}{self.anion}":
+            return {self.A_site: 1, self.anion: 1}
+        # BO2 termination (e.g., VO2)
+        elif termination == f"{self.B_site}{self.anion}2":
+            return {self.B_site: 1, self.anion: 2}
+
+        return None
+
     def create_surface(
         self,
         miller_index: Tuple[int, int, int],
@@ -1089,11 +1396,17 @@ class PerovskiteSurfaceBuilder(SurfaceBuilder):
 
         # Create symmetric slab if requested
         if symmetric:
-            # Ensure odd number of layers
-            if layers % 2 == 0:
-                layers += 1
+            # Convert named termination to composition dict
+            term_dict = self._get_termination_composition(termination)
+
+            # Use the trimming approach for true symmetry
             best_slab = super().create_symmetric_slab(
-                miller_index, layers, vacuum, fix_bottom
+                miller_index=miller_index,
+                layers=layers,
+                vacuum=vacuum,
+                termination=term_dict,
+                min_layers=max(layers - 2, 5),
+                fix_bottom=fix_bottom,
             )
             best_slab.termination = f"{termination}_symmetric" if termination else "symmetric"
 
@@ -1101,7 +1414,7 @@ class PerovskiteSurfaceBuilder(SurfaceBuilder):
         if supercell:
             best_slab = best_slab.repeat_xy(supercell[0], supercell[1])
 
-        # Fix bottom layers
+        # Fix bottom layers (may already be applied by create_symmetric_slab)
         if fix_bottom > 0 and not best_slab.fixed_indices:
             best_slab.fix_bottom_layers(fix_bottom)
 

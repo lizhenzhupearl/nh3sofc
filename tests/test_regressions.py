@@ -190,3 +190,225 @@ class TestSpecializedBuildersAutoDetect:
 
         assert builder.cation == 'Ce', f"Expected Ce, got {builder.cation}"
         assert builder.anion == 'O', f"Expected O, got {builder.anion}"
+
+
+class TestLayerToleranceAutoCalculation:
+    """
+    Bug: Fixed 0.5 A tolerance in identify_layers() splits V and O atoms
+    in LaVO3 VO2 layers into separate layers because they have z-position
+    differences of ~0.5-0.6 A.
+
+    Fix: Added estimate_layer_tolerance() method that calculates tolerance
+    from covalent radii (0.5 * min_bond_length). Changed default tolerance
+    to "auto" which uses this calculation.
+
+    Date fixed: 2026-01-22
+    """
+
+    def test_auto_tolerance_is_calculated_from_radii(self, perovskite_bulk):
+        """Auto tolerance should be calculated from covalent radii."""
+        from nh3sofc.structure import SurfaceBuilder, SlabStructure
+
+        builder = SurfaceBuilder(perovskite_bulk)
+        slab = builder.create_surface(
+            miller_index=(0, 0, 1),
+            layers=6,
+            vacuum=15.0,
+        )
+
+        tol = slab.estimate_layer_tolerance()
+
+        # For LaVO3: V-O covalent radii sum = ~2.19 A
+        # Expected tolerance ~1.1 A (0.5 * 2.19)
+        assert tol > 0.8, f"Tolerance {tol} too small for perovskite"
+        assert tol < 1.5, f"Tolerance {tol} unexpectedly large"
+
+    def test_identify_layers_uses_auto_tolerance_by_default(self, perovskite_bulk):
+        """identify_layers() should use auto tolerance by default."""
+        from nh3sofc.structure import SurfaceBuilder
+
+        builder = SurfaceBuilder(perovskite_bulk)
+        slab = builder.create_surface(
+            miller_index=(0, 0, 1),
+            layers=6,
+            vacuum=15.0,
+        )
+
+        # With auto tolerance, should get fewer, properly-grouped layers
+        layers_auto = slab.identify_layers()  # default is "auto"
+        layers_small = slab.identify_layers(tolerance=0.3)  # small tolerance
+
+        # Small tolerance should create more (incorrectly split) layers
+        assert len(layers_small) >= len(layers_auto), \
+            "Auto tolerance should group atoms better than small tolerance"
+
+    def test_auto_tolerance_groups_perovskite_layers_correctly(self, perovskite_bulk):
+        """V and O in VO2 layer should be grouped together with auto tolerance."""
+        from nh3sofc.structure import SurfaceBuilder
+
+        builder = SurfaceBuilder(perovskite_bulk)
+        slab = builder.create_surface(
+            miller_index=(0, 0, 1),
+            layers=8,
+            vacuum=15.0,
+        )
+
+        layers = slab.identify_layers()
+
+        # Check that we have layers with both V and O (VO2-like)
+        vo2_layers = [
+            layer for layer in layers
+            if 'V' in layer['composition'] and 'O' in layer['composition']
+        ]
+        assert len(vo2_layers) > 0, \
+            "Should have VO2-like layers with both V and O"
+
+        # Check that we have layers with both La and O (LaO-like)
+        lao_layers = [
+            layer for layer in layers
+            if 'La' in layer['composition'] and 'O' in layer['composition']
+            and 'V' not in layer['composition']
+        ]
+        assert len(lao_layers) > 0, \
+            "Should have LaO-like layers with La and O but not V"
+
+
+class TestSymmetricSlabTrimming:
+    """
+    Bug: create_symmetric_slab() did not create truly symmetric slabs.
+    Top layer had different composition than bottom layer (e.g., VO2 on
+    top vs O-only on bottom).
+
+    Fix: Added trim_to_symmetric_termination() method that creates an
+    oversized slab and trims to layers matching target termination.
+    Updated create_symmetric_slab() to use this approach.
+
+    Date fixed: 2026-01-22
+    """
+
+    def test_symmetric_slab_has_matching_terminations(self, perovskite_bulk):
+        """Top and bottom layers should have matching element ratios."""
+        from nh3sofc.structure import SurfaceBuilder
+
+        builder = SurfaceBuilder(perovskite_bulk)
+        slab = builder.create_symmetric_slab(
+            miller_index=(0, 0, 1),
+            layers=7,
+            vacuum=15.0,
+            fix_bottom=0,  # Don't fix to simplify testing
+        )
+
+        layers = slab.identify_layers()
+        top_comp = layers[-1]["composition"]
+        bottom_comp = layers[0]["composition"]
+
+        # Get element ratios
+        def get_ratios(comp):
+            if not comp:
+                return {}
+            min_val = min(comp.values())
+            return {k: v / min_val for k, v in comp.items()}
+
+        top_ratios = get_ratios(top_comp)
+        bottom_ratios = get_ratios(bottom_comp)
+
+        # Must have same elements
+        assert set(top_ratios.keys()) == set(bottom_ratios.keys()), \
+            f"Top {top_comp} and bottom {bottom_comp} have different elements"
+
+        # Ratios should match (within tolerance)
+        for elem in top_ratios:
+            assert abs(top_ratios[elem] - bottom_ratios[elem]) < 0.1, \
+                f"Element {elem} ratio differs: top={top_ratios[elem]}, bottom={bottom_ratios[elem]}"
+
+    def test_trim_to_lao_termination(self, perovskite_bulk):
+        """Should be able to create LaO-terminated symmetric slab."""
+        from nh3sofc.structure import SurfaceBuilder
+
+        builder = SurfaceBuilder(perovskite_bulk)
+
+        # First create a regular slab to trim
+        slab = builder.create_surface(
+            miller_index=(0, 0, 1),
+            layers=10,
+            vacuum=15.0,
+        )
+
+        # Trim to LaO termination
+        symmetric = slab.trim_to_symmetric_termination(
+            termination={"La": 1, "O": 1},
+            min_layers=5,
+        )
+
+        layers = symmetric.identify_layers()
+        top_comp = layers[-1]["composition"]
+        bottom_comp = layers[0]["composition"]
+
+        # Both should have La and O, with same ratio
+        assert "La" in top_comp and "O" in top_comp, \
+            f"Top layer {top_comp} should have La and O"
+        assert "La" in bottom_comp and "O" in bottom_comp, \
+            f"Bottom layer {bottom_comp} should have La and O"
+
+        # V should NOT be in the termination layers
+        assert "V" not in top_comp, f"Top layer should not have V: {top_comp}"
+        assert "V" not in bottom_comp, f"Bottom layer should not have V: {bottom_comp}"
+
+    def test_trim_to_vo2_termination(self, perovskite_bulk):
+        """Should be able to create VO2-terminated symmetric slab."""
+        from nh3sofc.structure import SurfaceBuilder
+
+        builder = SurfaceBuilder(perovskite_bulk)
+
+        # First create a regular slab to trim
+        slab = builder.create_surface(
+            miller_index=(0, 0, 1),
+            layers=10,
+            vacuum=15.0,
+        )
+
+        # Trim to VO2 termination
+        symmetric = slab.trim_to_symmetric_termination(
+            termination={"V": 1, "O": 2},
+            min_layers=5,
+        )
+
+        layers = symmetric.identify_layers()
+        top_comp = layers[-1]["composition"]
+        bottom_comp = layers[0]["composition"]
+
+        # Both should have V and O
+        assert "V" in top_comp and "O" in top_comp, \
+            f"Top layer {top_comp} should have V and O"
+        assert "V" in bottom_comp and "O" in bottom_comp, \
+            f"Bottom layer {bottom_comp} should have V and O"
+
+        # Check V:O ratio is approximately 1:2
+        top_ratio = top_comp.get("O", 0) / top_comp.get("V", 1)
+        bottom_ratio = bottom_comp.get("O", 0) / bottom_comp.get("V", 1)
+        assert 1.5 < top_ratio < 2.5, f"Top V:O ratio wrong: {top_ratio}"
+        assert 1.5 < bottom_ratio < 2.5, f"Bottom V:O ratio wrong: {bottom_ratio}"
+
+    def test_perovskite_builder_symmetric_uses_termination(self, perovskite_bulk):
+        """PerovskiteSurfaceBuilder should use termination for symmetric slabs."""
+        from nh3sofc.structure import PerovskiteSurfaceBuilder
+
+        builder = PerovskiteSurfaceBuilder(perovskite_bulk)
+
+        # Create LaO-terminated symmetric slab
+        slab = builder.create_surface(
+            miller_index=(0, 0, 1),
+            termination="LaO",
+            layers=7,
+            symmetric=True,
+            fix_bottom=0,
+        )
+
+        layers = slab.identify_layers()
+        top_comp = layers[-1]["composition"]
+        bottom_comp = layers[0]["composition"]
+
+        # Both should be LaO-like (La and O, no V)
+        for comp, name in [(top_comp, "Top"), (bottom_comp, "Bottom")]:
+            assert "La" in comp, f"{name} should have La: {comp}"
+            assert "O" in comp, f"{name} should have O: {comp}"
