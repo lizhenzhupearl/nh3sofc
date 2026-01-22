@@ -102,6 +102,7 @@ class AdsorbatePlacer:
         height: float = 2.0,
         mol_index: int = 0,
         rotation: Optional[Tuple[float, float, float]] = None,
+        orientation: Optional[Tuple[float, float, float]] = None,
     ) -> Atoms:
         """
         Add adsorbate at a specific position (Method 1).
@@ -120,12 +121,18 @@ class AdsorbatePlacer:
             Index of atom in molecule to use as anchor
         rotation : tuple, optional
             Euler angles (alpha, beta, gamma) in radians
+        orientation : tuple, optional
+            Alias for rotation (deprecated, use rotation instead)
 
         Returns
         -------
         Atoms
             Slab with adsorbate
         """
+        # Handle orientation alias (deprecated)
+        if orientation is not None and rotation is None:
+            rotation = orientation
+
         slab_copy = self.slab.copy()
         mol = self._get_molecule(adsorbate)
 
@@ -152,6 +159,7 @@ class AdsorbatePlacer:
         n_configs: int = 10,
         height: float = 2.0,
         random_seed: Optional[int] = None,
+        seed: Optional[int] = None,
     ) -> List[Atoms]:
         """
         Add adsorbate at random positions with random orientations (Method 2).
@@ -166,12 +174,18 @@ class AdsorbatePlacer:
             Height above surface
         random_seed : int, optional
             Random seed for reproducibility
+        seed : int, optional
+            Alias for random_seed (deprecated, use random_seed instead)
 
         Returns
         -------
         list
             List of Atoms objects with different configurations
         """
+        # Handle seed alias (deprecated)
+        if seed is not None and random_seed is None:
+            random_seed = seed
+
         if random_seed is not None:
             np.random.seed(random_seed)
 
@@ -215,6 +229,8 @@ class AdsorbatePlacer:
         orientations: int = 4,
         height: float = 2.0,
         random_seed: Optional[int] = None,
+        nx: Optional[int] = None,
+        ny: Optional[int] = None,
     ) -> List[Atoms]:
         """
         Add adsorbate on a grid of positions (Method 3).
@@ -231,12 +247,21 @@ class AdsorbatePlacer:
             Height above surface
         random_seed : int, optional
             Random seed
+        nx : int, optional
+            Grid x dimension (deprecated, use grid_size instead)
+        ny : int, optional
+            Grid y dimension (deprecated, use grid_size instead)
 
         Returns
         -------
         list
             List of Atoms objects for all grid positions
         """
+        # Handle nx/ny aliases (deprecated)
+        if nx is not None or ny is not None:
+            grid_size = (nx if nx is not None else grid_size[0],
+                        ny if ny is not None else grid_size[1])
+
         if random_seed is not None:
             np.random.seed(random_seed)
 
@@ -271,6 +296,7 @@ class AdsorbatePlacer:
     def add_on_site(
         self,
         adsorbate: str,
+        site_type: str = "ontop",
         atom_types: Optional[List[str]] = None,
         site_indices: Optional[List[int]] = None,
         n_orientations: int = 5,
@@ -288,6 +314,10 @@ class AdsorbatePlacer:
         ----------
         adsorbate : str
             Adsorbate molecule name
+        site_type : str
+            Site type: "ontop" (above atoms), "bridge" (between pairs),
+            or "hollow" (between triplets). Bridge and hollow require
+            CatKit for accurate site detection.
         atom_types : list, optional
             List of element symbols to target (e.g., ["La", "V"])
         site_indices : list, optional
@@ -309,6 +339,20 @@ class AdsorbatePlacer:
         if random_seed is not None:
             np.random.seed(random_seed)
 
+        # Handle bridge and hollow sites
+        site_type_lower = site_type.lower()
+        if site_type_lower in ("bridge", "hollow", "4fold"):
+            # Delegate to CatKit for accurate site detection
+            try:
+                return self.add_catkit(adsorbate, site_type=site_type, height=height)
+            except ImportError:
+                # Fallback: compute simple bridge/hollow sites
+                return self._add_on_computed_site(
+                    adsorbate, site_type_lower, atom_types,
+                    n_orientations, height, z_threshold
+                )
+
+        # Ontop placement: directly above surface atoms
         # Get surface atoms
         surface_indices, _ = get_surface_atoms(self.slab, z_threshold)
 
@@ -348,14 +392,100 @@ class AdsorbatePlacer:
 
         return configs
 
+    def _add_on_computed_site(
+        self,
+        adsorbate: str,
+        site_type: str,
+        atom_types: Optional[List[str]],
+        n_orientations: int,
+        height: float,
+        z_threshold: float,
+    ) -> List[Atoms]:
+        """
+        Fallback for bridge/hollow sites when CatKit is not available.
+
+        Computes approximate site positions from surface atom geometry.
+        """
+        from scipy.spatial import Delaunay
+
+        surface_indices, _ = get_surface_atoms(self.slab, z_threshold)
+
+        # Filter by atom type if specified
+        if atom_types is not None:
+            surface_indices = [
+                i for i in surface_indices
+                if self.slab[i].symbol in atom_types
+            ]
+
+        if len(surface_indices) < 2:
+            raise ValueError("Not enough surface atoms for bridge/hollow sites")
+
+        surface_positions = self.slab.positions[surface_indices]
+        z_top = surface_positions[:, 2].max()
+
+        # Get xy positions for triangulation
+        xy_positions = surface_positions[:, :2]
+
+        sites = []
+
+        if site_type == "bridge":
+            # Bridge sites: midpoints between neighboring atoms
+            # Use distance cutoff to find neighbors
+            cutoff = 4.0  # Angstrom
+            for i, pos_i in enumerate(surface_positions):
+                for j, pos_j in enumerate(surface_positions):
+                    if j <= i:
+                        continue
+                    dist = np.linalg.norm(pos_i[:2] - pos_j[:2])
+                    if dist < cutoff:
+                        midpoint = (pos_i + pos_j) / 2
+                        sites.append(midpoint[:2])
+
+        elif site_type == "hollow":
+            # Hollow sites: centroids of triangles from Delaunay triangulation
+            if len(xy_positions) >= 3:
+                try:
+                    tri = Delaunay(xy_positions)
+                    for simplex in tri.simplices:
+                        centroid = xy_positions[simplex].mean(axis=0)
+                        sites.append(centroid)
+                except Exception:
+                    # Fallback: use centroids of close triplets
+                    pass
+
+        if not sites:
+            raise ValueError(f"Could not find {site_type} sites. "
+                           "Consider installing CatKit for better site detection.")
+
+        configs = []
+
+        for site_xy in sites:
+            for _ in range(n_orientations):
+                slab_copy = self.slab.copy()
+                mol = self._get_molecule(adsorbate)
+
+                # Random orientation
+                mol.rotate(np.random.uniform(0, 360), "z")
+                mol.rotate(np.random.uniform(0, 180), "y")
+                mol.rotate(np.random.uniform(0, 360), "x")
+
+                # Place above the site
+                mol.translate([site_xy[0], site_xy[1], z_top + height])
+
+                combined = slab_copy + mol
+                configs.append(combined)
+
+        return configs
+
     def add_with_collision(
         self,
         adsorbate: str,
+        n_configs: int = 1,
         min_distance: float = 2.0,
         height: float = 2.0,
         max_attempts: int = 100,
         random_seed: Optional[int] = None,
-    ) -> Optional[Atoms]:
+    ) -> Union[Optional[Atoms], List[Atoms]]:
         """
         Add adsorbate with collision detection (Method 5).
 
@@ -365,19 +495,23 @@ class AdsorbatePlacer:
         ----------
         adsorbate : str
             Adsorbate molecule name
+        n_configs : int
+            Number of configurations to generate. If 1, returns single
+            Atoms or None (backward compatible). If >1, returns list.
         min_distance : float
             Minimum allowed distance between atoms (Angstrom)
         height : float
             Height above surface
         max_attempts : int
-            Maximum placement attempts
+            Maximum placement attempts per configuration
         random_seed : int, optional
             Random seed
 
         Returns
         -------
-        Atoms or None
-            Slab with adsorbate, or None if placement failed
+        Atoms, None, or list
+            If n_configs=1: Slab with adsorbate, or None if placement failed
+            If n_configs>1: List of Atoms objects (may be shorter than n_configs)
         """
         if random_seed is not None:
             np.random.seed(random_seed)
@@ -385,7 +519,13 @@ class AdsorbatePlacer:
         a, b = self._get_cell_dimensions()
         z_top = self._get_surface_z()
 
-        for attempt in range(max_attempts):
+        configs = []
+        total_attempts = 0
+        max_total_attempts = max_attempts * n_configs
+
+        while len(configs) < n_configs and total_attempts < max_total_attempts:
+            total_attempts += 1
+
             # Random position
             x = np.random.uniform(0, a)
             y = np.random.uniform(0, b)
@@ -410,10 +550,17 @@ class AdsorbatePlacer:
 
             if min_dist > min_distance:
                 combined = self.slab.copy() + mol
-                return combined
+                configs.append(combined)
 
-        print(f"Warning: Failed to place adsorbate after {max_attempts} attempts")
-        return None
+        if len(configs) < n_configs:
+            print(f"Warning: Only generated {len(configs)}/{n_configs} configs "
+                  f"after {total_attempts} attempts")
+
+        # Backward compatibility: return single Atoms or None if n_configs=1
+        if n_configs == 1:
+            return configs[0] if configs else None
+
+        return configs
 
     def add_catkit(
         self,

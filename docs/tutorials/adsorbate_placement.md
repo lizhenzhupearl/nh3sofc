@@ -42,7 +42,7 @@ result = placer.add_simple(
     adsorbate="NH3",
     position=(2.5, 2.5),
     height=2.0,
-    orientation=(0, 0, 0)  # Euler angles
+    rotation=(0, 0, 0)  # Euler angles (alpha, beta, gamma) in radians
 )
 ```
 
@@ -56,7 +56,7 @@ configs = placer.add_random(
     adsorbate="NH3",
     n_configs=10,
     height=2.0,
-    seed=42  # Reproducibility
+    random_seed=42  # Reproducibility
 )
 
 print(f"Generated {len(configs)} configurations")
@@ -70,8 +70,8 @@ Systematic grid-based placement.
 # 3x3 grid of positions
 configs = placer.add_grid(
     adsorbate="NH3",
-    nx=3,
-    ny=3,
+    grid_size=(3, 3),
+    orientations=1,  # One orientation per grid point
     height=2.0
 )
 # Returns 9 configurations

@@ -63,7 +63,7 @@ oxynitride = defect_builder.create_oxynitride(
     vacancy_concentration=0.10   # 10% O/N vacancies
 )
 
-print(f"Composition: {oxynitride.atoms.get_chemical_formula()}")
+print(f"Composition: {oxynitride.get_chemical_formula()}")
 ```
 
 ## Step 2: Place NH3 Adsorbate
@@ -71,13 +71,13 @@ print(f"Composition: {oxynitride.atoms.get_chemical_formula()}")
 ```python
 from nh3sofc.structure import AdsorbatePlacer
 
-placer = AdsorbatePlacer(oxynitride.atoms)
+placer = AdsorbatePlacer(oxynitride)
 
 # Method 1: On-top of specific atom types
 configs = placer.add_on_site(
     adsorbate="NH3",
-    site_type="ontop",
-    atom_types=["La", "V"],  # Only on La or V atoms
+    site_type="ontop",        # Site type: "ontop", "bridge", or "hollow"
+    atom_types=["La", "V"],   # Only on La or V atoms
     height=2.0
 )
 print(f"Generated {len(configs)} configurations")
@@ -85,7 +85,7 @@ print(f"Generated {len(configs)} configurations")
 # Method 2: Random placement with collision detection
 random_configs = placer.add_with_collision(
     adsorbate="NH3",
-    n_configs=10,
+    n_configs=10,             # Number of configurations to generate
     min_distance=2.0,
     height=2.0
 )
@@ -94,8 +94,8 @@ random_configs = placer.add_with_collision(
 try:
     all_sites = placer.add_catkit("NH3", site_type="ontop")
 except ImportError:
-    print("CatKit not installed, using random placement")
-    all_sites = random_configs
+    print("CatKit not installed, using collision-aware placement")
+    all_sites = random_configs if random_configs else []
 ```
 
 ## Step 3: Set Up VASP Calculation
