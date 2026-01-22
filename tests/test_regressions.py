@@ -555,3 +555,96 @@ class TestPOSCARStandardFormat:
                     assert p["poscar"].exists()
             finally:
                 os.chdir(original_cwd)
+
+
+class TestDefectPlacementProbabilistic:
+    """
+    Bug: DefectBuilder placement strategies were deterministic.
+    "surface" placement always selected the topmost atoms, so all
+    configurations with same strategy were identical.
+
+    Fix: Changed to probability-weighted selection where surface/near_N
+    atoms have higher probability but selection is still stochastic.
+    Added surface_n_preference and vacancy_preference parameters.
+
+    Date fixed: 2026-01-22
+    """
+
+    def test_surface_placement_produces_different_configs(self, perovskite_bulk):
+        """Surface placement should produce different configurations."""
+        from nh3sofc.structure import SurfaceBuilder, DefectBuilder
+
+        builder = SurfaceBuilder(perovskite_bulk)
+        slab = builder.create_surface(
+            miller_index=(0, 0, 1),
+            layers=6,
+            vacuum=15.0,
+        )
+
+        defect = DefectBuilder(slab)
+
+        # Generate multiple configs with same strategy
+        configs = []
+        for i in range(5):
+            atoms = defect.create_oxynitride(
+                nitrogen_fraction=0.5,
+                placement="surface",
+                surface_n_preference=0.7,
+                random_seed=i,
+            )
+            configs.append(atoms)
+
+        # Configs should have different N positions
+        n_positions_list = []
+        for atoms in configs:
+            n_indices = [i for i, s in enumerate(atoms.get_chemical_symbols()) if s == "N"]
+            n_positions_list.append(tuple(sorted(n_indices)))
+
+        unique_configs = set(n_positions_list)
+        assert len(unique_configs) > 1, \
+            "Surface placement should produce different configurations"
+
+    def test_preference_affects_n_distribution(self, perovskite_bulk):
+        """Higher surface_n_preference should put more N at surface."""
+        from nh3sofc.structure import SurfaceBuilder, DefectBuilder
+
+        builder = SurfaceBuilder(perovskite_bulk)
+        slab = builder.create_surface(
+            miller_index=(0, 0, 1),
+            layers=6,
+            vacuum=15.0,
+        )
+
+        defect = DefectBuilder(slab)
+        z_positions = slab.atoms.positions[:, 2]
+        z_cutoff = z_positions.max() - 0.3 * (z_positions.max() - z_positions.min())
+
+        # Low preference (nearly random)
+        low_pref_surface_n = 0
+        for i in range(10):
+            atoms = defect.create_oxynitride(
+                nitrogen_fraction=0.5,
+                placement="surface",
+                surface_n_preference=0.55,  # Nearly random
+                random_seed=i,
+            )
+            n_indices = [j for j, s in enumerate(atoms.get_chemical_symbols()) if s == "N"]
+            surface_n = sum(1 for idx in n_indices if atoms.positions[idx, 2] > z_cutoff)
+            low_pref_surface_n += surface_n
+
+        # High preference
+        high_pref_surface_n = 0
+        for i in range(10):
+            atoms = defect.create_oxynitride(
+                nitrogen_fraction=0.5,
+                placement="surface",
+                surface_n_preference=0.95,  # Strongly prefer surface
+                random_seed=i + 100,
+            )
+            n_indices = [j for j, s in enumerate(atoms.get_chemical_symbols()) if s == "N"]
+            surface_n = sum(1 for idx in n_indices if atoms.positions[idx, 2] > z_cutoff)
+            high_pref_surface_n += surface_n
+
+        # High preference should have more N at surface on average
+        assert high_pref_surface_n > low_pref_surface_n, \
+            f"High preference ({high_pref_surface_n}) should have more surface N than low ({low_pref_surface_n})"

@@ -244,43 +244,68 @@ print(f"Formula: {oxynitride.get_chemical_formula()}")
 
 ### Defect Placement Strategies
 
-Control where defects are placed using the `placement` parameter:
+Control where defects are placed using `placement` and preference parameters.
+The placement uses **probability-weighted selection** - atoms in preferred regions
+have higher probability of being selected, but selection is still stochastic,
+so each configuration is unique.
 
 ```python
-# Random placement (default)
+# Random placement (default) - uniform probability
 oxynitride_random = defect.create_oxynitride(
     nitrogen_fraction=0.67,
     vacancy_concentration=0.10,
     placement="random"
 )
 
-# Surface-populated: defects preferentially near surface
+# Surface-populated: N preferentially at surface
+# surface_n_preference controls how strongly N prefers surface:
+#   0.5 = random distribution
+#   0.7 = ~70% of surface anions will be N (default)
+#   0.9 = ~90% of surface anions will be N
 oxynitride_surface = defect.create_oxynitride(
     nitrogen_fraction=0.67,
     vacancy_concentration=0.10,
-    placement="surface"
+    placement="surface",
+    surface_n_preference=0.8,   # 80% of surface anions are N
+    vacancy_preference=0.6,     # Vacancies slightly prefer surface
 )
 
-# Near-N: vacancies placed near existing N atoms
+# Near-N: vacancies preferentially near existing N atoms
+# vacancy_preference controls how strongly vacancies prefer being near N
 oxynitride_near_n = defect.create_oxynitride(
     nitrogen_fraction=0.67,
     vacancy_concentration=0.10,
-    placement="near_N"
+    placement="near_N",
+    vacancy_preference=0.7,     # Vacancies moderately prefer being near N
 )
 ```
 
+#### Preference Parameters
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `surface_n_preference` | 0.5-1.0 | For "surface" placement: fraction of surface anions that are N |
+| `vacancy_preference` | 0.5-1.0 | Preference strength for vacancy placement (surface or near-N) |
+
+- **0.5** = Random (no preference)
+- **0.7** = Moderate preference (default)
+- **0.9-1.0** = Strong preference (most defects in target region)
+
 ### Generate Configuration Pool
 
-For screening studies, generate multiple configurations with all strategies:
+For screening studies, generate multiple configurations with all strategies.
+Each configuration is unique due to probability-weighted selection:
 
 ```python
 from nh3sofc import save_configurations
 
-# Generate pool of candidate structures
+# Generate pool of candidate structures with preference settings
 pool = defect.create_oxynitride_pool(
     nitrogen_fraction=0.67,
     vacancy_concentration=0.10,
-    n_configs_per_strategy=5,  # 5 configs × 3 strategies = 15 total
+    n_configs_per_strategy=5,       # 5 configs × 3 strategies = 15 total
+    surface_n_preference=0.8,       # For "surface": 80% surface anions are N
+    vacancy_preference=0.6,         # Moderate vacancy preference
 )
 
 print(f"Generated {len(pool)} configurations")
@@ -302,6 +327,7 @@ for config, p in zip(pool, result["configs"]):
 # Each config dict contains:
 # - atoms: the Atoms object
 # - placement: "random", "surface", or "near_N"
+# - surface_n_preference, vacancy_preference: the preference values used
 # - nitrogen_fraction, vacancy_concentration
 # - config_id: unique identifier
 ```

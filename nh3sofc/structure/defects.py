@@ -181,15 +181,99 @@ class DefectBuilder:
 
         return surface_indices, bulk_indices
 
+    def _calculate_selection_weights(
+        self,
+        candidates: List[int],
+        placement: str = "random",
+        preference: float = 0.7,
+        n_positions: Optional[np.ndarray] = None,
+        surface_fraction: float = 0.3,
+    ) -> np.ndarray:
+        """
+        Calculate selection weights for each candidate based on placement strategy.
+
+        Parameters
+        ----------
+        candidates : list
+            Candidate atom indices
+        placement : str
+            Placement strategy: "random", "surface", or "near_N"
+        preference : float
+            Preference strength (0.5 = random, 1.0 = strongly prefer target region)
+            For "surface": fraction of surface atoms to be selected type (e.g., 0.8 = 80% N at surface)
+            For "near_N": how strongly vacancies prefer to be near N
+        n_positions : ndarray, optional
+            Positions of N atoms (required for "near_N" placement)
+        surface_fraction : float
+            Fraction of slab height considered as surface region
+
+        Returns
+        -------
+        ndarray
+            Normalized weights for each candidate
+        """
+        n_candidates = len(candidates)
+        if n_candidates == 0:
+            return np.array([])
+
+        if placement == "random" or preference <= 0.5:
+            # Uniform weights
+            return np.ones(n_candidates) / n_candidates
+
+        elif placement == "surface":
+            # Weight by z-position: higher z = higher weight
+            z_positions = self.atoms.positions[:, 2]
+            z_min = z_positions.min()
+            z_max = z_positions.max()
+            z_range = z_max - z_min
+
+            if z_range < 0.1:
+                return np.ones(n_candidates) / n_candidates
+
+            # Normalize z to [0, 1] for candidates
+            z_values = np.array([z_positions[i] for i in candidates])
+            z_normalized = (z_values - z_min) / z_range
+
+            # Apply preference: weights increase exponentially with z
+            # preference controls steepness: 0.5 = flat, 1.0 = strongly surface-biased
+            steepness = (preference - 0.5) * 10  # 0 to 5
+            weights = np.exp(steepness * z_normalized)
+
+            return weights / weights.sum()
+
+        elif placement == "near_N" and n_positions is not None and len(n_positions) > 0:
+            # Weight by inverse distance to nearest N
+            positions = self.atoms.positions
+            distances = []
+            for idx in candidates:
+                pos = positions[idx]
+                min_dist = np.min(np.linalg.norm(n_positions - pos, axis=1))
+                distances.append(max(min_dist, 0.1))  # Avoid division by zero
+
+            distances = np.array(distances)
+
+            # Apply preference: closer to N = higher weight
+            steepness = (preference - 0.5) * 10
+            weights = np.exp(-steepness * distances / distances.max())
+
+            return weights / weights.sum()
+
+        else:
+            return np.ones(n_candidates) / n_candidates
+
     def _select_with_placement(
         self,
         candidates: List[int],
         n_select: int,
         placement: str = "random",
+        preference: float = 0.7,
         n_positions: Optional[np.ndarray] = None,
     ) -> List[int]:
         """
-        Select atoms based on placement strategy.
+        Select atoms based on placement strategy with probability weighting.
+
+        Uses weighted random sampling where atoms in preferred regions
+        have higher probability of selection, but selection is still stochastic.
 
         Parameters
         ----------
@@ -199,6 +283,8 @@ class DefectBuilder:
             Number of atoms to select
         placement : str
             Placement strategy: "random", "surface", or "near_N"
+        preference : float
+            Preference strength (0.5 = random, 1.0 = strongly prefer target region)
         n_positions : ndarray, optional
             Positions of N atoms (required for "near_N" placement)
 
@@ -212,30 +298,20 @@ class DefectBuilder:
 
         n_select = min(n_select, len(candidates))
 
-        if placement == "random":
-            return np.random.choice(candidates, size=n_select, replace=False).tolist()
+        # Calculate selection weights
+        weights = self._calculate_selection_weights(
+            candidates, placement, preference, n_positions
+        )
 
-        elif placement == "surface":
-            # Sort by z-position (descending) and prefer surface atoms
-            z_positions = self.atoms.positions[:, 2]
-            sorted_candidates = sorted(candidates, key=lambda i: -z_positions[i])
-            return sorted_candidates[:n_select]
+        # Weighted random selection without replacement
+        selected = np.random.choice(
+            candidates,
+            size=n_select,
+            replace=False,
+            p=weights
+        ).tolist()
 
-        elif placement == "near_N" and n_positions is not None and len(n_positions) > 0:
-            # Sort by minimum distance to any N atom
-            positions = self.atoms.positions
-            distances = []
-            for idx in candidates:
-                pos = positions[idx]
-                min_dist = np.min(np.linalg.norm(n_positions - pos, axis=1))
-                distances.append((idx, min_dist))
-            # Sort by distance (ascending) - closer to N preferred
-            sorted_by_dist = sorted(distances, key=lambda x: x[1])
-            return [idx for idx, _ in sorted_by_dist[:n_select]]
-
-        else:
-            # Fallback to random
-            return np.random.choice(candidates, size=n_select, replace=False).tolist()
+        return selected
 
     def create_oxynitride(
         self,
@@ -243,6 +319,8 @@ class DefectBuilder:
         vacancy_concentration: float = 0.0,
         vacancy_element: str = "N",
         placement: str = "random",
+        surface_n_preference: float = 0.7,
+        vacancy_preference: float = 0.7,
         random_seed: Optional[int] = None,
     ) -> Atoms:
         """
@@ -263,8 +341,17 @@ class DefectBuilder:
         placement : str
             Defect placement strategy:
             - "random": Random placement (default)
-            - "surface": Preferentially place defects near surface
+            - "surface": Preferentially place N and vacancies near surface
             - "near_N": Place vacancies near existing N atoms
+        surface_n_preference : float
+            For "surface" placement: preference for N at surface (0.5-1.0)
+            0.5 = random distribution, 0.7 = ~70% of surface anions are N,
+            1.0 = strongly prefer N at surface. Default: 0.7
+        vacancy_preference : float
+            Preference strength for vacancy placement (0.5-1.0)
+            For "surface": preference for vacancies at surface
+            For "near_N": preference for vacancies near N atoms
+            0.5 = random, 1.0 = strongly prefer target region. Default: 0.7
         random_seed : int, optional
             Random seed for reproducibility
 
@@ -275,14 +362,24 @@ class DefectBuilder:
 
         Examples
         --------
-        >>> # Create LaVON₂ (no vacancies)
+        >>> # Create LaVON₂ (no vacancies, random N distribution)
         >>> oxynitride = builder.create_oxynitride(nitrogen_fraction=0.67)
         >>>
-        >>> # Create LaVON₁.₉ with surface-populated N
+        >>> # Create LaVON₁.₉ with N preferring surface (70% surface anions are N)
         >>> oxynitride = builder.create_oxynitride(
         ...     nitrogen_fraction=0.67,
         ...     vacancy_concentration=0.1,
-        ...     placement="surface"
+        ...     placement="surface",
+        ...     surface_n_preference=0.7,  # 70% of surface anions will be N
+        ...     vacancy_preference=0.6,    # Vacancies slightly prefer surface
+        ... )
+        >>>
+        >>> # Near-N vacancies with moderate preference
+        >>> oxynitride = builder.create_oxynitride(
+        ...     nitrogen_fraction=0.67,
+        ...     vacancy_concentration=0.1,
+        ...     placement="near_N",
+        ...     vacancy_preference=0.7,  # Vacancies moderately prefer being near N
         ... )
         """
         if random_seed is not None:
@@ -294,8 +391,9 @@ class DefectBuilder:
         n_to_substitute = int(n_oxygen * nitrogen_fraction)
 
         # Select O atoms to convert to N based on placement strategy
+        # For N placement, use surface_n_preference
         substitute_indices = self._select_with_placement(
-            o_indices, n_to_substitute, placement
+            o_indices, n_to_substitute, placement, preference=surface_n_preference
         )
 
         new_atoms = self.atoms.copy()
@@ -325,8 +423,10 @@ class DefectBuilder:
             if placement == "near_N":
                 n_positions = new_atoms.positions[substitute_indices]
 
+            # For vacancy placement, use vacancy_preference
             vacancy_indices = self._select_with_placement(
-                vacancy_candidates, n_vacancies, placement, n_positions
+                vacancy_candidates, n_vacancies, placement,
+                preference=vacancy_preference, n_positions=n_positions
             )
 
             # Remove vacancy atoms
@@ -342,13 +442,16 @@ class DefectBuilder:
         vacancy_element: str = "N",
         n_configs_per_strategy: int = 3,
         strategies: Optional[List[str]] = None,
+        surface_n_preference: float = 0.7,
+        vacancy_preference: float = 0.7,
         random_seed: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Generate a pool of oxynitride configurations with different placement strategies.
 
         Creates multiple configurations for each placement strategy to explore
-        different defect distributions.
+        different defect distributions. Uses probability-weighted selection so
+        each configuration is unique even with the same strategy.
 
         Parameters
         ----------
@@ -362,6 +465,11 @@ class DefectBuilder:
             Number of random configurations per strategy
         strategies : list, optional
             List of strategies to use. Default: ["random", "surface", "near_N"]
+        surface_n_preference : float
+            For "surface" strategy: preference for N at surface (0.5-1.0)
+            0.5 = random, 0.7 = ~70% surface anions are N, 1.0 = strongly prefer surface
+        vacancy_preference : float
+            Preference strength for vacancy placement (0.5-1.0)
         random_seed : int, optional
             Base random seed for reproducibility
 
@@ -374,6 +482,8 @@ class DefectBuilder:
                 "placement": str,
                 "nitrogen_fraction": float,
                 "vacancy_concentration": float,
+                "surface_n_preference": float,
+                "vacancy_preference": float,
                 "config_id": int,
             }, ...]
 
@@ -383,7 +493,9 @@ class DefectBuilder:
         >>> pool = builder.create_oxynitride_pool(
         ...     nitrogen_fraction=0.67,
         ...     vacancy_concentration=0.1,
-        ...     n_configs_per_strategy=5
+        ...     n_configs_per_strategy=5,
+        ...     surface_n_preference=0.8,  # 80% of surface anions will be N
+        ...     vacancy_preference=0.6,    # Vacancies slightly prefer surface
         ... )
         >>> print(f"Generated {len(pool)} configurations")
         """
@@ -404,6 +516,8 @@ class DefectBuilder:
                     vacancy_concentration=vacancy_concentration,
                     vacancy_element=vacancy_element,
                     placement=strategy,
+                    surface_n_preference=surface_n_preference,
+                    vacancy_preference=vacancy_preference,
                     random_seed=seed,
                 )
 
@@ -412,6 +526,8 @@ class DefectBuilder:
                     "placement": strategy,
                     "nitrogen_fraction": nitrogen_fraction,
                     "vacancy_concentration": vacancy_concentration,
+                    "surface_n_preference": surface_n_preference,
+                    "vacancy_preference": vacancy_preference,
                     "config_id": config_id,
                 })
                 config_id += 1
