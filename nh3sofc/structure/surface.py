@@ -1405,7 +1405,7 @@ class PerovskiteSurfaceBuilder(SurfaceBuilder):
             Miller indices (h, k, l)
         termination : str, optional
             Desired termination (e.g., "LaO", "VO2", "AO", "BO2")
-            If None, uses first available termination.
+            If None, auto-selects based on symmetric flag.
         layers : int
             Number of layers
         vacuum : float
@@ -1427,52 +1427,12 @@ class PerovskiteSurfaceBuilder(SurfaceBuilder):
             termination = termination.replace("AO", f"{self.A_site}{self.anion}")
             termination = termination.replace("BO2", f"{self.B_site}{self.anion}2")
 
-        # Get all terminations and find the matching one
-        all_terms = self.get_all_terminations(miller_index, layers, vacuum)
-
-        best_slab = None
-        best_match = 0
-
-        for slab in all_terms:
-            term_info = self.identify_termination(slab)
-            comp = term_info["composition"]
-
-            # Check if this termination matches the requested one
-            if termination:
-                if termination == f"{self.A_site}{self.anion}":
-                    # Looking for AO termination
-                    if self.A_site in comp and self.anion in comp:
-                        match = comp.get(self.A_site, 0) + comp.get(self.anion, 0)
-                        if match > best_match:
-                            best_match = match
-                            best_slab = slab
-                elif termination == f"{self.B_site}{self.anion}2":
-                    # Looking for BO2 termination
-                    if self.B_site in comp:
-                        match = comp.get(self.B_site, 0)
-                        if match > best_match:
-                            best_match = match
-                            best_slab = slab
-            else:
-                # No specific termination requested, use first
-                best_slab = slab
-                break
-
-        if best_slab is None:
-            # Fall back to basic surface creation
-            best_slab = super().create_surface(
-                miller_index, layers, vacuum, fix_bottom=fix_bottom
-            )
-
-        best_slab.termination = termination
-
-        # Create symmetric slab if requested
         if symmetric:
+            # For symmetric slabs, use create_symmetric_slab directly
             # Convert named termination to composition dict
             term_dict = self._get_termination_composition(termination)
 
-            # Use the trimming approach for true symmetry
-            best_slab = super().create_symmetric_slab(
+            slab = super().create_symmetric_slab(
                 miller_index=miller_index,
                 layers=layers,
                 vacuum=vacuum,
@@ -1480,17 +1440,57 @@ class PerovskiteSurfaceBuilder(SurfaceBuilder):
                 min_layers=max(layers - 2, 5),
                 fix_bottom=fix_bottom,
             )
-            best_slab.termination = f"{termination}_symmetric" if termination else "symmetric"
+            slab.termination = f"{termination}_symmetric" if termination else "symmetric"
+        else:
+            # For non-symmetric slabs, find best termination from shifted slabs
+            all_terms = self.get_all_terminations(miller_index, layers, vacuum)
+
+            best_slab = None
+            best_match = 0
+
+            for term_slab in all_terms:
+                term_info = self.identify_termination(term_slab)
+                comp = term_info["composition"]
+
+                # Check if this termination matches the requested one
+                if termination:
+                    if termination == f"{self.A_site}{self.anion}":
+                        # Looking for AO termination
+                        if self.A_site in comp and self.anion in comp:
+                            match = comp.get(self.A_site, 0) + comp.get(self.anion, 0)
+                            if match > best_match:
+                                best_match = match
+                                best_slab = term_slab
+                    elif termination == f"{self.B_site}{self.anion}2":
+                        # Looking for BO2 termination
+                        if self.B_site in comp:
+                            match = comp.get(self.B_site, 0)
+                            if match > best_match:
+                                best_match = match
+                                best_slab = term_slab
+                else:
+                    # No specific termination requested, use first
+                    best_slab = term_slab
+                    break
+
+            if best_slab is None:
+                # Fall back to basic surface creation
+                best_slab = super().create_surface(
+                    miller_index, layers, vacuum, fix_bottom=fix_bottom
+                )
+
+            best_slab.termination = termination
+            slab = best_slab
+
+            # Fix bottom layers for non-symmetric slab
+            if fix_bottom > 0 and not slab.fixed_indices:
+                slab.fix_bottom_layers(fix_bottom)
 
         # Apply supercell
         if supercell:
-            best_slab = best_slab.repeat_xy(supercell[0], supercell[1])
+            slab = slab.repeat_xy(supercell[0], supercell[1])
 
-        # Fix bottom layers (may already be applied by create_symmetric_slab)
-        if fix_bottom > 0 and not best_slab.fixed_indices:
-            best_slab.fix_bottom_layers(fix_bottom)
-
-        return best_slab
+        return slab
 
     def analyze_surface(self, slab: SlabStructure) -> Dict:
         """
