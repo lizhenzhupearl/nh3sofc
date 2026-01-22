@@ -8,7 +8,8 @@ This tutorial covers building surfaces from bulk structures, handling surface po
 - Generate surface slabs with different Miller indices
 - Handle polar surfaces (critical for perovskites)
 - Create symmetric slabs with specific terminations
-- Create oxynitride structures with controlled defect concentrations
+- Create oxynitride structures with different defect placement strategies
+- Generate configuration pools for screening studies
 
 ## Step 1: Load Bulk Structure
 
@@ -267,6 +268,8 @@ oxynitride_near_n = defect.create_oxynitride(
 For screening studies, generate multiple configurations with all strategies:
 
 ```python
+from ase.io import write
+
 # Generate pool of candidate structures
 pool = defect.create_oxynitride_pool(
     nitrogen_fraction=0.67,
@@ -280,6 +283,12 @@ print(f"Generated {len(pool)} configurations")
 for config in pool:
     filename = f"oxynitride_{config['placement']}_{config['config_id']}.xyz"
     write(filename, config['atoms'])
+
+# Each config dict contains:
+# - atoms: the Atoms object
+# - placement: "random", "surface", or "near_N"
+# - nitrogen_fraction, vacancy_concentration
+# - config_id: unique identifier
 ```
 
 ### Create Specific Vacancies
@@ -349,8 +358,11 @@ from ase.io import write
 # 1. Load bulk perovskite
 bulk = BulkStructure.from_cif("LaVO3.cif")
 
-# 2. Create symmetric surface with LaO termination
-builder = SurfaceBuilder(bulk)
+# 2. Create supercell for sufficient surface area
+supercell = bulk.make_supercell((2, 2, 1))
+
+# 3. Create symmetric surface with LaO termination
+builder = SurfaceBuilder(supercell)
 
 surface = builder.create_symmetric_slab(
     miller_index=(0, 0, 1),
@@ -360,25 +372,25 @@ surface = builder.create_symmetric_slab(
     fix_bottom=2,
 )
 
-# Optionally create supercell
-surface = surface.repeat_xy(2, 2)
-
-# 3. Check polarity
+# 4. Check polarity
 polarity = surface.check_polarity()
 print(f"Dipole: {polarity['dipole_z']:.2f} e·Å")
 
-# 4. Create oxynitride (returns Atoms directly)
+# 5. Generate oxynitride configuration pool
 defect = DefectBuilder(surface)
-oxynitride = defect.create_oxynitride(
+pool = defect.create_oxynitride_pool(
     nitrogen_fraction=0.67,
     vacancy_concentration=0.10,
+    n_configs_per_strategy=5,
 )
 
-# 5. Check composition
-print(f"Final composition: {oxynitride.get_chemical_formula()}")
+print(f"Generated {len(pool)} configurations")
 
-# 6. Save
-write("LaVON2_001_symmetric.xyz", oxynitride)
+# 6. Save all configurations
+for config in pool:
+    filename = f"LaVON2_{config['placement']}_{config['config_id']}.xyz"
+    write(filename, config['atoms'])
+    print(f"Saved {filename}: {config['atoms'].get_chemical_formula()}")
 ```
 
 ## Next Steps
