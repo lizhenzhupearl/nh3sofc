@@ -1,0 +1,8 @@
+# Exclude internal files from git archive (GitHub zip downloads)
+CLAUDE.md export-ignore
+docs/plans/ export-ignore
+docs/plans/** export-ignore
+.gitattributes export-ignore
+
+# Exclude development files from archive
+workspace/ export-ignore

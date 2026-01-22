@@ -35,6 +35,10 @@ theme:
 
 plugins:
   - search
+  - exclude:
+      glob:
+        - plans/*
+        - plans/**
   - mkdocstrings:
       handlers:
         python:
@@ -84,11 +88,12 @@ nav:
     - NH3 Decomposition: tutorials/decomposition.md
     - NEB Transition States: tutorials/neb.md
     - Thermochemistry: tutorials/thermochemistry.md
-    - High-Throughput Screening: tutorials/screening.md
-    - MACE Force Fields: tutorials/mace.md
+    - Theoretical Framework: tutorials/theory.md
     - Microkinetic Modeling: tutorials/microkinetics.md
     - Surface Comparison: tutorials/surface_comparison.md
     - Exsolution Simulation: tutorials/exsolution.md
+    - High-Throughput Screening: tutorials/screening.md
+    - MACE Force Fields: tutorials/mace.md
   - API Reference:
     - Overview: api/index.md
     - Core: api/core.md
