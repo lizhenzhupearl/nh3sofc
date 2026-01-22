@@ -342,6 +342,70 @@ vacancy_structure = defect.create_vacancy(
 )
 ```
 
+### Analyze Defect Distribution
+
+Use statistical analysis to verify that defects are distributed as expected:
+
+```python
+from nh3sofc.structure import (
+    analyze_defect_distribution,
+    analyze_oxynitride_pool,
+    print_defect_analysis,
+)
+
+# Analyze a single configuration
+stats = analyze_defect_distribution(
+    oxynitride_surface,
+    surface_fraction=0.3,  # Top 30% of slab is "surface"
+)
+
+print(f"N atoms in surface region: {stats['n_surface']} / {stats['n_total']}")
+print(f"Surface N/(N+O) ratio: {stats['surface_n_ratio']:.1%}")
+print(f"Bulk N/(N+O) ratio: {stats['bulk_n_ratio']:.1%}")
+
+# With vacancy analysis (requires original structure for comparison)
+stats = analyze_defect_distribution(
+    oxynitride_surface,
+    reference_atoms=symmetric_surface.atoms,  # Original before defects
+    surface_fraction=0.3,
+    near_n_cutoff=3.0,  # Count vacancies within 3 Å of N
+)
+
+print(f"Vacancies in surface: {stats['vacancy_surface']} / {stats['vacancy_total']}")
+print(f"Vacancies near N: {stats['vacancy_near_n']} ({stats['vacancy_near_n_fraction']:.1%})")
+
+# Analyze entire pool and compare strategies
+pool_stats = analyze_oxynitride_pool(pool, surface_fraction=0.3)
+
+# Print formatted summary
+print_defect_analysis(pool_stats, title="Oxynitride Pool Analysis")
+```
+
+Example output:
+```
+============================================================
+Oxynitride Pool Analysis
+============================================================
+
+Total configurations: 15
+
+RANDOM Strategy (5 configs):
+  Surface N ratio: 48.2% ± 5.3%
+  Bulk N ratio: 51.1% ± 4.8%
+  N in surface: 32.5% ± 3.2%
+
+SURFACE Strategy (5 configs):
+  Surface N ratio: 72.4% ± 4.1%
+  Bulk N ratio: 38.6% ± 3.9%
+  N in surface: 48.3% ± 2.8%
+
+NEAR_N Strategy (5 configs):
+  Surface N ratio: 50.1% ± 6.2%
+  Bulk N ratio: 49.8% ± 5.1%
+  Vacancies near N: 68.3% ± 8.5%
+============================================================
+```
+
 ## Step 6: Visualize and Save
 
 ```python

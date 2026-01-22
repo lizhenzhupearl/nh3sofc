@@ -850,3 +850,314 @@ def generate_vacancy_series(
             config_id += 1
 
     return results
+
+
+def analyze_defect_distribution(
+    atoms: Atoms,
+    reference_atoms: Optional[Atoms] = None,
+    surface_fraction: float = 0.3,
+    near_n_cutoff: float = 3.0,
+) -> Dict[str, Any]:
+    """
+    Analyze the distribution of N atoms and vacancies in a structure.
+
+    Parameters
+    ----------
+    atoms : Atoms
+        Structure to analyze (oxynitride with possible vacancies)
+    reference_atoms : Atoms, optional
+        Original structure before vacancy creation (to count vacancies)
+    surface_fraction : float
+        Fraction of slab height considered as surface region (default: 0.3 = top 30%)
+    near_n_cutoff : float
+        Distance cutoff for "near N" analysis in Angstroms (default: 3.0)
+
+    Returns
+    -------
+    dict
+        Analysis results with keys:
+        - n_total: total number of N atoms
+        - n_surface: N atoms in surface region
+        - n_surface_fraction: fraction of N in surface region
+        - o_total: total number of O atoms
+        - o_surface: O atoms in surface region
+        - surface_n_ratio: N/(N+O) ratio in surface region
+        - bulk_n_ratio: N/(N+O) ratio in bulk region
+        - vacancy_total: total vacancies (if reference provided)
+        - vacancy_surface: vacancies in surface region
+        - vacancy_near_n: vacancies within cutoff of N atoms
+        - vacancy_near_n_fraction: fraction of vacancies near N
+
+    Examples
+    --------
+    >>> stats = analyze_defect_distribution(oxynitride, reference_atoms=original)
+    >>> print(f"Surface N ratio: {stats['surface_n_ratio']:.1%}")
+    >>> print(f"Vacancies near N: {stats['vacancy_near_n_fraction']:.1%}")
+    """
+    symbols = atoms.get_chemical_symbols()
+    positions = atoms.get_positions()
+    z_positions = positions[:, 2]
+
+    # Define surface region (top surface_fraction of slab)
+    z_min, z_max = z_positions.min(), z_positions.max()
+    z_cutoff = z_max - surface_fraction * (z_max - z_min)
+
+    # Get indices by element
+    n_indices = [i for i, s in enumerate(symbols) if s == "N"]
+    o_indices = [i for i, s in enumerate(symbols) if s == "O"]
+
+    # Count N and O in surface vs bulk
+    n_surface = [i for i in n_indices if z_positions[i] >= z_cutoff]
+    n_bulk = [i for i in n_indices if z_positions[i] < z_cutoff]
+    o_surface = [i for i in o_indices if z_positions[i] >= z_cutoff]
+    o_bulk = [i for i in o_indices if z_positions[i] < z_cutoff]
+
+    # Calculate ratios
+    total_surface_anions = len(n_surface) + len(o_surface)
+    total_bulk_anions = len(n_bulk) + len(o_bulk)
+
+    surface_n_ratio = len(n_surface) / total_surface_anions if total_surface_anions > 0 else 0
+    bulk_n_ratio = len(n_bulk) / total_bulk_anions if total_bulk_anions > 0 else 0
+
+    results = {
+        "n_total": len(n_indices),
+        "n_surface": len(n_surface),
+        "n_bulk": len(n_bulk),
+        "n_surface_fraction": len(n_surface) / len(n_indices) if n_indices else 0,
+        "o_total": len(o_indices),
+        "o_surface": len(o_surface),
+        "o_bulk": len(o_bulk),
+        "surface_n_ratio": surface_n_ratio,
+        "bulk_n_ratio": bulk_n_ratio,
+        "surface_fraction_used": surface_fraction,
+        "z_cutoff": z_cutoff,
+    }
+
+    # Vacancy analysis (requires reference structure)
+    if reference_atoms is not None:
+        ref_symbols = reference_atoms.get_chemical_symbols()
+        ref_positions = reference_atoms.get_positions()
+
+        # Find vacancy positions by comparing with reference
+        # Vacancies are anion sites in reference that are missing in current
+        ref_anion_positions = []
+        for i, s in enumerate(ref_symbols):
+            if s in ["O", "N"]:
+                ref_anion_positions.append(ref_positions[i])
+
+        current_anion_positions = []
+        for i, s in enumerate(symbols):
+            if s in ["O", "N"]:
+                current_anion_positions.append(positions[i])
+
+        # Find missing positions (vacancies)
+        vacancy_positions = []
+        for ref_pos in ref_anion_positions:
+            found = False
+            for cur_pos in current_anion_positions:
+                if np.linalg.norm(ref_pos - cur_pos) < 0.5:  # Within 0.5 Å
+                    found = True
+                    break
+            if not found:
+                vacancy_positions.append(ref_pos)
+
+        vacancy_positions = np.array(vacancy_positions) if vacancy_positions else np.array([]).reshape(0, 3)
+
+        # Count vacancies in surface region
+        if len(vacancy_positions) > 0:
+            vacancy_z = vacancy_positions[:, 2]
+            vacancy_surface = np.sum(vacancy_z >= z_cutoff)
+            vacancy_bulk = np.sum(vacancy_z < z_cutoff)
+
+            # Count vacancies near N atoms
+            n_positions = positions[n_indices]
+            vacancy_near_n = 0
+            for vac_pos in vacancy_positions:
+                if len(n_positions) > 0:
+                    min_dist = np.min(np.linalg.norm(n_positions - vac_pos, axis=1))
+                    if min_dist <= near_n_cutoff:
+                        vacancy_near_n += 1
+
+            results.update({
+                "vacancy_total": len(vacancy_positions),
+                "vacancy_surface": int(vacancy_surface),
+                "vacancy_bulk": int(vacancy_bulk),
+                "vacancy_surface_fraction": vacancy_surface / len(vacancy_positions) if len(vacancy_positions) > 0 else 0,
+                "vacancy_near_n": vacancy_near_n,
+                "vacancy_near_n_fraction": vacancy_near_n / len(vacancy_positions) if len(vacancy_positions) > 0 else 0,
+                "near_n_cutoff": near_n_cutoff,
+            })
+        else:
+            results.update({
+                "vacancy_total": 0,
+                "vacancy_surface": 0,
+                "vacancy_bulk": 0,
+                "vacancy_surface_fraction": 0,
+                "vacancy_near_n": 0,
+                "vacancy_near_n_fraction": 0,
+                "near_n_cutoff": near_n_cutoff,
+            })
+
+    return results
+
+
+def analyze_oxynitride_pool(
+    pool: List[Dict[str, Any]],
+    reference_atoms: Optional[Atoms] = None,
+    surface_fraction: float = 0.3,
+    near_n_cutoff: float = 3.0,
+) -> Dict[str, Any]:
+    """
+    Analyze a pool of oxynitride configurations and compute statistics.
+
+    Parameters
+    ----------
+    pool : list of dict
+        Pool from create_oxynitride_pool(), each with "atoms" and "placement" keys
+    reference_atoms : Atoms, optional
+        Original structure before defects (for vacancy counting)
+    surface_fraction : float
+        Fraction of slab considered as surface (default: 0.3)
+    near_n_cutoff : float
+        Distance cutoff for "near N" analysis (default: 3.0 Å)
+
+    Returns
+    -------
+    dict
+        Summary statistics:
+        - by_strategy: dict with stats for each placement strategy
+        - overall: aggregated stats across all configurations
+
+    Examples
+    --------
+    >>> pool = defect.create_oxynitride_pool(...)
+    >>> stats = analyze_oxynitride_pool(pool, reference_atoms=slab.atoms)
+    >>>
+    >>> # Print summary by strategy
+    >>> for strategy, data in stats["by_strategy"].items():
+    ...     print(f"{strategy}:")
+    ...     print(f"  Surface N ratio: {data['surface_n_ratio_mean']:.1%} ± {data['surface_n_ratio_std']:.1%}")
+    """
+    # Group by placement strategy
+    by_strategy = {}
+
+    for config in pool:
+        strategy = config.get("placement", "unknown")
+        atoms = config["atoms"]
+
+        analysis = analyze_defect_distribution(
+            atoms,
+            reference_atoms=reference_atoms,
+            surface_fraction=surface_fraction,
+            near_n_cutoff=near_n_cutoff,
+        )
+
+        if strategy not in by_strategy:
+            by_strategy[strategy] = []
+        by_strategy[strategy].append(analysis)
+
+    # Compute statistics for each strategy
+    results = {"by_strategy": {}, "overall": {}}
+
+    all_analyses = []
+
+    for strategy, analyses in by_strategy.items():
+        all_analyses.extend(analyses)
+
+        strategy_stats = {
+            "n_configs": len(analyses),
+            "surface_n_ratio_mean": np.mean([a["surface_n_ratio"] for a in analyses]),
+            "surface_n_ratio_std": np.std([a["surface_n_ratio"] for a in analyses]),
+            "bulk_n_ratio_mean": np.mean([a["bulk_n_ratio"] for a in analyses]),
+            "bulk_n_ratio_std": np.std([a["bulk_n_ratio"] for a in analyses]),
+            "n_surface_fraction_mean": np.mean([a["n_surface_fraction"] for a in analyses]),
+            "n_surface_fraction_std": np.std([a["n_surface_fraction"] for a in analyses]),
+        }
+
+        # Add vacancy stats if available
+        if "vacancy_total" in analyses[0]:
+            strategy_stats.update({
+                "vacancy_surface_fraction_mean": np.mean([a["vacancy_surface_fraction"] for a in analyses]),
+                "vacancy_surface_fraction_std": np.std([a["vacancy_surface_fraction"] for a in analyses]),
+                "vacancy_near_n_fraction_mean": np.mean([a["vacancy_near_n_fraction"] for a in analyses]),
+                "vacancy_near_n_fraction_std": np.std([a["vacancy_near_n_fraction"] for a in analyses]),
+            })
+
+        results["by_strategy"][strategy] = strategy_stats
+
+    # Overall statistics
+    if all_analyses:
+        results["overall"] = {
+            "n_configs": len(all_analyses),
+            "surface_n_ratio_mean": np.mean([a["surface_n_ratio"] for a in all_analyses]),
+            "surface_n_ratio_std": np.std([a["surface_n_ratio"] for a in all_analyses]),
+            "n_surface_fraction_mean": np.mean([a["n_surface_fraction"] for a in all_analyses]),
+        }
+
+        if "vacancy_total" in all_analyses[0]:
+            results["overall"].update({
+                "vacancy_surface_fraction_mean": np.mean([a["vacancy_surface_fraction"] for a in all_analyses]),
+                "vacancy_near_n_fraction_mean": np.mean([a["vacancy_near_n_fraction"] for a in all_analyses]),
+            })
+
+    return results
+
+
+def print_defect_analysis(
+    stats: Dict[str, Any],
+    title: str = "Defect Distribution Analysis",
+) -> None:
+    """
+    Print a formatted summary of defect distribution analysis.
+
+    Parameters
+    ----------
+    stats : dict
+        Results from analyze_defect_distribution() or analyze_oxynitride_pool()
+    title : str
+        Title for the report
+
+    Examples
+    --------
+    >>> stats = analyze_defect_distribution(oxynitride)
+    >>> print_defect_analysis(stats)
+
+    >>> pool_stats = analyze_oxynitride_pool(pool)
+    >>> print_defect_analysis(pool_stats, title="Pool Analysis")
+    """
+    print("=" * 60)
+    print(title)
+    print("=" * 60)
+
+    # Single structure analysis
+    if "n_total" in stats:
+        print(f"\nNitrogen Distribution:")
+        print(f"  Total N atoms: {stats['n_total']}")
+        print(f"  N in surface (top {stats['surface_fraction_used']*100:.0f}%): {stats['n_surface']} ({stats['n_surface_fraction']*100:.1f}%)")
+        print(f"  N in bulk: {stats['n_bulk']}")
+        print(f"\nAnion Composition by Region:")
+        print(f"  Surface N/(N+O) ratio: {stats['surface_n_ratio']*100:.1f}%")
+        print(f"  Bulk N/(N+O) ratio: {stats['bulk_n_ratio']*100:.1f}%")
+
+        if "vacancy_total" in stats:
+            print(f"\nVacancy Distribution:")
+            print(f"  Total vacancies: {stats['vacancy_total']}")
+            print(f"  Vacancies in surface: {stats['vacancy_surface']} ({stats['vacancy_surface_fraction']*100:.1f}%)")
+            print(f"  Vacancies in bulk: {stats['vacancy_bulk']}")
+            print(f"  Vacancies near N (< {stats['near_n_cutoff']} Å): {stats['vacancy_near_n']} ({stats['vacancy_near_n_fraction']*100:.1f}%)")
+
+    # Pool analysis
+    elif "by_strategy" in stats:
+        print(f"\nTotal configurations: {stats['overall']['n_configs']}")
+
+        for strategy, data in stats["by_strategy"].items():
+            print(f"\n{strategy.upper()} Strategy ({data['n_configs']} configs):")
+            print(f"  Surface N ratio: {data['surface_n_ratio_mean']*100:.1f}% ± {data['surface_n_ratio_std']*100:.1f}%")
+            print(f"  Bulk N ratio: {data['bulk_n_ratio_mean']*100:.1f}% ± {data['bulk_n_ratio_std']*100:.1f}%")
+            print(f"  N in surface: {data['n_surface_fraction_mean']*100:.1f}% ± {data['n_surface_fraction_std']*100:.1f}%")
+
+            if "vacancy_surface_fraction_mean" in data:
+                print(f"  Vacancies in surface: {data['vacancy_surface_fraction_mean']*100:.1f}% ± {data['vacancy_surface_fraction_std']*100:.1f}%")
+                print(f"  Vacancies near N: {data['vacancy_near_n_fraction_mean']*100:.1f}% ± {data['vacancy_near_n_fraction_std']*100:.1f}%")
+
+    print("=" * 60)

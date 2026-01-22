@@ -7,7 +7,14 @@ from .surface import (
     create_slab_from_cif,
 )
 from .adsorbates import AdsorbatePlacer, filter_unique_configs, save_configs
-from .defects import DefectBuilder, OxynitrideStructure, generate_vacancy_series
+from .defects import (
+    DefectBuilder,
+    OxynitrideStructure,
+    generate_vacancy_series,
+    analyze_defect_distribution,
+    analyze_oxynitride_pool,
+    print_defect_analysis,
+)
 from .decomposition import (
     DecompositionBuilder,
     generate_decomposition_pathway,
@@ -35,6 +42,9 @@ __all__ = [
     "DefectBuilder",
     "OxynitrideStructure",
     "generate_vacancy_series",
+    "analyze_defect_distribution",
+    "analyze_oxynitride_pool",
+    "print_defect_analysis",
     # Decomposition
     "DecompositionBuilder",
     "generate_decomposition_pathway",

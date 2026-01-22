@@ -648,3 +648,70 @@ class TestDefectPlacementProbabilistic:
         # High preference should have more N at surface on average
         assert high_pref_surface_n > low_pref_surface_n, \
             f"High preference ({high_pref_surface_n}) should have more surface N than low ({low_pref_surface_n})"
+
+    def test_analyze_defect_distribution(self, perovskite_bulk):
+        """analyze_defect_distribution should return expected statistics."""
+        from nh3sofc.structure import SurfaceBuilder, DefectBuilder
+        from nh3sofc.structure import analyze_defect_distribution
+
+        builder = SurfaceBuilder(perovskite_bulk)
+        slab = builder.create_surface(
+            miller_index=(0, 0, 1),
+            layers=6,
+            vacuum=15.0,
+        )
+
+        defect = DefectBuilder(slab)
+        oxynitride = defect.create_oxynitride(
+            nitrogen_fraction=0.5,
+            placement="surface",
+            surface_n_preference=0.8,
+            random_seed=42,
+        )
+
+        stats = analyze_defect_distribution(oxynitride, surface_fraction=0.3)
+
+        # Should have required keys
+        assert "n_total" in stats
+        assert "n_surface" in stats
+        assert "surface_n_ratio" in stats
+        assert "bulk_n_ratio" in stats
+
+        # Surface N ratio should be higher than bulk for surface placement
+        # (with high preference)
+        assert stats["surface_n_ratio"] >= stats["bulk_n_ratio"], \
+            f"Surface N ratio ({stats['surface_n_ratio']}) should be >= bulk ({stats['bulk_n_ratio']})"
+
+    def test_analyze_oxynitride_pool(self, perovskite_bulk):
+        """analyze_oxynitride_pool should return statistics by strategy."""
+        from nh3sofc.structure import SurfaceBuilder, DefectBuilder
+        from nh3sofc.structure import analyze_oxynitride_pool
+
+        builder = SurfaceBuilder(perovskite_bulk)
+        slab = builder.create_surface(
+            miller_index=(0, 0, 1),
+            layers=6,
+            vacuum=15.0,
+        )
+
+        defect = DefectBuilder(slab)
+        pool = defect.create_oxynitride_pool(
+            nitrogen_fraction=0.5,
+            n_configs_per_strategy=3,
+            strategies=["random", "surface"],
+            surface_n_preference=0.8,
+            random_seed=42,
+        )
+
+        stats = analyze_oxynitride_pool(pool, surface_fraction=0.3)
+
+        # Should have stats by strategy
+        assert "by_strategy" in stats
+        assert "random" in stats["by_strategy"]
+        assert "surface" in stats["by_strategy"]
+
+        # Surface strategy should have higher surface N ratio than random
+        surface_ratio = stats["by_strategy"]["surface"]["surface_n_ratio_mean"]
+        random_ratio = stats["by_strategy"]["random"]["surface_n_ratio_mean"]
+        assert surface_ratio >= random_ratio, \
+            f"Surface strategy ({surface_ratio:.2f}) should have >= N ratio than random ({random_ratio:.2f})"
