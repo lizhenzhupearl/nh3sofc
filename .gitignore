@@ -96,3 +96,7 @@ tmp/
 
 # Working directory
 workspace/
+
+# Project-specific files (not shared)
+docs/plans/
+CLAUDE.md
