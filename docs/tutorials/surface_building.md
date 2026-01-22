@@ -21,7 +21,7 @@ print(f"Formula: {bulk.atoms.get_chemical_formula()}")
 print(f"Space group: {bulk.get_spacegroup()}")
 
 # Create supercell if needed
-supercell = bulk.make_supercell((2, 2, 2))
+supercell = bulk.make_supercell((2, 2, 1))
 ```
 
 ## Step 2: Generate Surface Slab
@@ -121,9 +121,11 @@ For polar surfaces, symmetric slabs (same termination on both sides) help cancel
 
 ```python
 # Create symmetric slab (automatically trims to matching terminations)
+supercell = bulk.make_supercell((2, 2, 1))
+builder = SurfaceBuilder(supercell)
 symmetric_surface = builder.create_symmetric_slab(
     miller_index=(0, 0, 1),
-    layers=7,
+    layers=4,
     vacuum=15.0,
     fix_bottom=2
 )
@@ -136,6 +138,7 @@ print(f"Bottom layer: {layers[0]['composition']}")
 # Verify reduced dipole
 polarity = symmetric_surface.check_polarity()
 print(f"Dipole after symmetrization: {polarity['dipole_z']:.2f} e·Å")
+print(f"Total number of atoms: {symmetric_surface.atoms.get_number_of_atoms()}")
 ```
 
 #### Requesting Specific Terminations
@@ -186,6 +189,7 @@ symmetric = oversized.trim_to_symmetric_termination(
 
 # Verify the result
 layers = symmetric.identify_layers()
+print(f"Total number of atoms: {symmetric.atoms.get_number_of_atoms()}")
 print(f"Total layers: {len(layers)}")
 print(f"Top: {layers[-1]['composition']}")
 print(f"Bottom: {layers[0]['composition']}")
@@ -220,7 +224,7 @@ for layer in layers:
 ```python
 from nh3sofc.structure import DefectBuilder
 
-defect = DefectBuilder(surface)
+defect = DefectBuilder(symmetric_surface)
 
 # Create oxynitride: replace 2/3 of O with N, add 10% vacancies
 oxynitride = defect.create_oxynitride(
