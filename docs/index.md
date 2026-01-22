@@ -156,7 +156,7 @@ Step-by-step guides for common workflows
 
 Complete API documentation
 
-[:material-frequently-asked-questions: **Examples**](examples/index.md){ .md-button }
+[:material-rocket-launch: **Quick Start**](quickstart.md){ .md-button }
 
 Code examples and use cases
 

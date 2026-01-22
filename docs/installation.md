@@ -213,7 +213,7 @@ pip install spglib
 ### Getting Help
 
 - Open an issue on [GitHub](https://github.com/lizhenzhupearl/nh3sofc/issues)
-- Check the [FAQ](faq.md)
+- Check the [Tutorials](tutorials/index.md) for common workflows
 
 ## Updating
 
