@@ -5,7 +5,6 @@ from .surface import (
     SurfaceBuilder,
     SlabStructure,
     create_slab_from_cif,
-    PerovskiteSurfaceBuilder,
 )
 from .adsorbates import AdsorbatePlacer, filter_unique_configs, save_configs
 from .defects import DefectBuilder, OxynitrideStructure, generate_vacancy_series
@@ -28,8 +27,6 @@ __all__ = [
     "SurfaceBuilder",
     "SlabStructure",
     "create_slab_from_cif",
-    # Surface - Specialized builders
-    "PerovskiteSurfaceBuilder",
     # Adsorbates
     "AdsorbatePlacer",
     "filter_unique_configs",

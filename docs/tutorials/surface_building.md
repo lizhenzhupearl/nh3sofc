@@ -7,7 +7,7 @@ This tutorial covers building surfaces from bulk structures, handling surface po
 - Load bulk structures from CIF files
 - Generate surface slabs with different Miller indices
 - Handle polar surfaces (critical for perovskites)
-- Use the PerovskiteSurfaceBuilder for ABO3 structures
+- Create symmetric slabs with specific terminations
 - Create oxynitride structures with controlled defect concentrations
 
 ## Step 1: Load Bulk Structure
@@ -191,63 +191,7 @@ print(f"Top: {layers[-1]['composition']}")
 print(f"Bottom: {layers[0]['composition']}")
 ```
 
-## Step 4: Perovskite Surface Builder
-
-NH3SOFC provides a specialized builder for ABO3 perovskite structures:
-
-### Perovskite Surfaces (ABO3)
-
-For LaVO3, SrTiO3, BaTiO3, etc.:
-
-```python
-from nh3sofc.structure import PerovskiteSurfaceBuilder
-
-# Create builder with automatic site detection
-builder = PerovskiteSurfaceBuilder(bulk)  # Auto-detects La as A-site, V as B-site
-
-# Or specify explicitly
-builder = PerovskiteSurfaceBuilder(bulk, A_site="La", B_site="V", anion="O")
-
-# See available terminations
-print(builder.get_termination_options((0, 0, 1)))  # ['LaO', 'VO2']
-
-# Create surface with specific termination
-surface = builder.create_surface(
-    miller_index=(0, 0, 1),
-    termination="LaO",      # Named termination (also accepts "AO" or "BO2")
-    layers=7,
-    symmetric=True,         # Symmetric slab (recommended for polar surfaces)
-    fix_bottom=2,
-    supercell=(2, 2)        # 2x2 supercell
-)
-
-# Analyze the surface
-analysis = builder.analyze_surface(surface)
-print(f"Termination: {analysis['termination_type']}")
-print(f"Surface composition: {analysis['surface_composition']}")
-```
-
-When `symmetric=True`, the builder creates a truly symmetric slab where both top and bottom layers have the same composition. For example, with `termination="LaO"`:
-
-```python
-# Verify both surfaces are LaO-terminated
-layers = surface.identify_layers()
-print(f"Top layer: {layers[-1]['composition']}")     # {'La': N, 'O': N}
-print(f"Bottom layer: {layers[0]['composition']}")   # {'La': N, 'O': N}
-
-# VO2 termination works the same way
-vo2_surface = builder.create_surface(
-    miller_index=(0, 0, 1),
-    termination="VO2",
-    layers=7,
-    symmetric=True
-)
-layers = vo2_surface.identify_layers()
-print(f"Top: {layers[-1]['composition']}")    # {'V': N, 'O': 2N}
-print(f"Bottom: {layers[0]['composition']}")  # {'V': N, 'O': 2N}
-```
-
-## Step 5: Stoichiometry Validation
+## Step 4: Stoichiometry Validation
 
 Check if your surface has the expected composition:
 
@@ -346,7 +290,7 @@ vasp.set_surface_settings()  # Adds IDIPOL=3, LDIPOL=.TRUE.
 ```python
 from nh3sofc.structure import (
     BulkStructure,
-    PerovskiteSurfaceBuilder,
+    SurfaceBuilder,
     DefectBuilder
 )
 from ase.io import write
@@ -354,17 +298,19 @@ from ase.io import write
 # 1. Load bulk perovskite
 bulk = BulkStructure.from_cif("LaVO3.cif")
 
-# 2. Create surface with specialized builder
-builder = PerovskiteSurfaceBuilder(bulk, A_site="La", B_site="V")
+# 2. Create symmetric surface with LaO termination
+builder = SurfaceBuilder(bulk)
 
-surface = builder.create_surface(
+surface = builder.create_symmetric_slab(
     miller_index=(0, 0, 1),
-    termination="LaO",
+    termination={"La": 1, "O": 1},  # LaO termination
     layers=7,
-    symmetric=True,
+    vacuum=15.0,
     fix_bottom=2,
-    supercell=(2, 2)
 )
+
+# Optionally create supercell
+surface = surface.repeat_xy(2, 2)
 
 # 3. Check polarity
 polarity = surface.check_polarity()

@@ -157,23 +157,6 @@ class TestSupercellPreservesConstraints:
             f"Expected {expected_fixed} fixed atoms, got {len(repeated.fixed_indices)}"
 
 
-class TestSpecializedBuildersAutoDetect:
-    """
-    Feature: Specialized builders should auto-detect cation/anion sites.
-
-    This ensures the auto-detection works correctly.
-    """
-
-    def test_perovskite_auto_detects_sites(self, perovskite_bulk):
-        """PerovskiteSurfaceBuilder should auto-detect A and B sites."""
-        from nh3sofc.structure import PerovskiteSurfaceBuilder
-
-        builder = PerovskiteSurfaceBuilder(perovskite_bulk)
-
-        assert builder.A_site == 'La', f"Expected La, got {builder.A_site}"
-        assert builder.B_site == 'V', f"Expected V, got {builder.B_site}"
-
-
 class TestLayerToleranceAutoCalculation:
     """
     Bug: Fixed 0.5 A tolerance in identify_layers() splits V and O atoms
@@ -370,30 +353,6 @@ class TestSymmetricSlabTrimming:
         bottom_ratio = bottom_comp.get("O", 0) / bottom_comp.get("V", 1)
         assert 1.5 < top_ratio < 2.5, f"Top V:O ratio wrong: {top_ratio}"
         assert 1.5 < bottom_ratio < 2.5, f"Bottom V:O ratio wrong: {bottom_ratio}"
-
-    def test_perovskite_builder_symmetric_uses_termination(self, perovskite_bulk):
-        """PerovskiteSurfaceBuilder should use termination for symmetric slabs."""
-        from nh3sofc.structure import PerovskiteSurfaceBuilder
-
-        builder = PerovskiteSurfaceBuilder(perovskite_bulk)
-
-        # Create LaO-terminated symmetric slab
-        slab = builder.create_surface(
-            miller_index=(0, 0, 1),
-            termination="LaO",
-            layers=7,
-            symmetric=True,
-            fix_bottom=0,
-        )
-
-        layers = slab.identify_layers()
-        top_comp = layers[-1]["composition"]
-        bottom_comp = layers[0]["composition"]
-
-        # Both should be LaO-like (La and O, no V)
-        for comp, name in [(top_comp, "Top"), (bottom_comp, "Bottom")]:
-            assert "La" in comp, f"{name} should have La: {comp}"
-            assert "O" in comp, f"{name} should have O: {comp}"
 
     def test_symmetric_slab_auto_finds_best_termination(self, perovskite_bulk):
         """create_symmetric_slab() without termination should auto-find valid one."""
