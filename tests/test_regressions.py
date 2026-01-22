@@ -7,6 +7,7 @@ If these tests fail, we've reintroduced the bug.
 import pytest
 import tempfile
 import numpy as np
+from pathlib import Path
 
 
 class TestPOSCARAtomOrdering:
@@ -423,3 +424,84 @@ class TestSymmetricSlabTrimming:
         layers8 = sym8.identify_layers()
         assert len(layers1) == len(layers8), \
             f"Different layer counts: {len(layers1)} vs {len(layers8)}"
+
+
+class TestPOSCARStandardFormat:
+    """
+    Bug: ASE's default POSCAR writer can produce non-standard format with
+    repeated atom types like "La O N La N O O" instead of unique labels.
+
+    Fix: Added write_poscar() function in core/io.py that writes proper
+    VASP5 format with unique element labels only.
+
+    Date fixed: 2026-01-22
+    """
+
+    def test_write_poscar_has_unique_elements(self, mixed_element_slab):
+        """write_poscar should produce only unique element labels."""
+        from nh3sofc import write_poscar
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filepath = f"{tmpdir}/test.vasp"
+            write_poscar(mixed_element_slab, filepath)
+
+            with open(filepath) as f:
+                lines = f.readlines()
+
+            # Line 6 (index 5) has element symbols
+            elements_line = lines[5].strip()
+            elements = elements_line.split()
+
+            # Elements should appear only once each
+            assert len(elements) == len(set(elements)), \
+                f"Elements repeated: {elements_line}. Expected unique labels only."
+
+    def test_write_poscar_preserves_atom_count(self, mixed_element_slab):
+        """write_poscar should preserve total atom count."""
+        from nh3sofc import write_poscar
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filepath = f"{tmpdir}/test.vasp"
+            write_poscar(mixed_element_slab, filepath)
+
+            with open(filepath) as f:
+                lines = f.readlines()
+
+            # Line 7 (index 6) has counts
+            counts_line = lines[6].strip()
+            counts = [int(x) for x in counts_line.split()]
+
+            assert sum(counts) == len(mixed_element_slab), \
+                f"POSCAR counts {sum(counts)} != atoms {len(mixed_element_slab)}"
+
+    def test_save_configurations_multiple_formats(self, simple_slab):
+        """save_configurations should save in multiple formats."""
+        from nh3sofc import save_configurations
+
+        configs = [simple_slab, simple_slab.copy()]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            paths = save_configurations(
+                configs,
+                tmpdir,
+                name_prefix="config",
+                formats=["poscar", "cif"]
+            )
+
+            assert len(paths) == 2
+            for p in paths:
+                assert "poscar" in p
+                assert "cif" in p
+                assert p["poscar"].exists()
+                assert p["cif"].exists()
+
+    def test_save_structure_creates_work_dir(self, simple_slab):
+        """save_structure should create work directory if needed."""
+        from nh3sofc import save_structure
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work_dir = f"{tmpdir}/new_subdir/configs"
+            paths = save_structure(simple_slab, work_dir, "test_struct")
+
+            assert paths["poscar"].exists()
+            assert paths["poscar"].parent == Path(work_dir)

@@ -26,6 +26,7 @@ The exsolution process involves four stages:
 
 ```python
 from nh3sofc.structure import BulkStructure, SurfaceBuilder, ExsolutionBuilder
+from nh3sofc import write_poscar
 
 # Load perovskite structure
 bulk = BulkStructure.from_cif("LaSrTiNiO3.cif")
@@ -48,11 +49,12 @@ pathway = builder.create_exsolution_pathway(
     vacancy_fraction=0.1
 )
 
-# Save structures
+# Save structures with proper POSCAR format (atoms sorted automatically)
+work_dir = "work/exsolution/Ni13"
 for step in pathway:
     atoms = step["atoms"]
     stage = step["stage"]
-    atoms.write(f"{stage}.vasp", format="vasp")
+    write_poscar(atoms, f"{work_dir}/{stage}.vasp")
     print(f"{stage}: {step['description']}")
 ```
 
@@ -70,6 +72,8 @@ print(f"O-site atoms: {len(sites['O_site'])}")  # O
 #### 2. Create Defective Perovskite
 
 ```python
+from nh3sofc import write_poscar
+
 defective = builder.create_defective_perovskite(
     a_site_vacancy_fraction=0.05,   # 5% A-site vacancies
     b_site_vacancy_fraction=0.1,    # 10% B-site (Ni) vacancies
@@ -77,7 +81,7 @@ defective = builder.create_defective_perovskite(
     b_site_element="Ni",            # Specifically remove Ni
     random_seed=42
 )
-defective.write("defective.vasp", format="vasp")
+write_poscar(defective, "work/exsolution/defective.vasp")
 ```
 
 #### 3. Create Nanoparticle on Surface
@@ -92,7 +96,7 @@ exsolved = builder.create_nanoparticle(
     socketed=True,               # Remove surface atoms (real exsolution)
     random_seed=42
 )
-exsolved.write("exsolved_Ni13.vasp", format="vasp")
+write_poscar(exsolved, "work/exsolution/exsolved_Ni13.vasp")
 ```
 
 ## Running Calculations

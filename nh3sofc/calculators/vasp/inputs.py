@@ -354,7 +354,10 @@ class VASPInputGenerator:
 
     def generate_poscar(self) -> str:
         """
-        Generate POSCAR file content.
+        Generate POSCAR file content with standard VASP format.
+
+        Uses proper format with unique element labels only (e.g., "La N O")
+        instead of repeated labels for each atom (e.g., "La O N La N O O").
 
         Note: If using generate_all() with sort_atoms=True (default), atoms
         are already sorted by element type before this method is called.
@@ -364,10 +367,29 @@ class VASPInputGenerator:
         str
             POSCAR file content
         """
+        from ...core.io import write_poscar
         from io import StringIO
-        output = StringIO()
-        ase_write(output, self.atoms, format="vasp", direct=True)
-        return output.getvalue()
+        import tempfile
+        import os
+
+        # Write to temporary file and read back content
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".vasp", delete=False) as f:
+            temp_path = f.name
+
+        try:
+            write_poscar(
+                self.atoms,
+                temp_path,
+                comment=self.atoms.get_chemical_formula(),
+                direct=True,
+                sort=False,  # Already sorted if sort_atoms=True in generate_all()
+            )
+            with open(temp_path, "r") as f:
+                content = f.read()
+        finally:
+            os.unlink(temp_path)
+
+        return content
 
     def generate_potcar(
         self,

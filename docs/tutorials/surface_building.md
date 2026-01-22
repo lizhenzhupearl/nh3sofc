@@ -49,13 +49,19 @@ print(f"Cell: {surface.atoms.cell.lengths()}")
 ### Different Terminations
 
 ```python
+from nh3sofc import write_poscar
+
+# Create work directory for this surface study
+work_dir = "work/surfaces/LaVO3_001"
+
 # Get all possible terminations
 terminations = builder.get_all_terminations((0, 0, 1))
 
 for i, term in enumerate(terminations):
     info = builder.identify_termination(term)
     print(f"Termination {i}: {info['composition']}")
-    term.write(f"surface_term_{i}.xyz")
+    # Save as POSCAR with proper format (atoms sorted by element automatically)
+    write_poscar(term, f"{work_dir}/POSCAR_term_{i}")
 ```
 
 ### Creating Supercells
@@ -268,7 +274,7 @@ oxynitride_near_n = defect.create_oxynitride(
 For screening studies, generate multiple configurations with all strategies:
 
 ```python
-from ase.io import write
+from nh3sofc import save_configurations
 
 # Generate pool of candidate structures
 pool = defect.create_oxynitride_pool(
@@ -279,10 +285,16 @@ pool = defect.create_oxynitride_pool(
 
 print(f"Generated {len(pool)} configurations")
 
-# Save all configurations
-for config in pool:
-    filename = f"oxynitride_{config['placement']}_{config['config_id']}.xyz"
-    write(filename, config['atoms'])
+# Extract atoms and create descriptive names
+configs = [config['atoms'] for config in pool]
+names = [f"{config['placement']}_{config['config_id']}" for config in pool]
+
+# Save all configurations as POSCAR files (atoms sorted by element automatically)
+work_dir = "work/oxynitrides/LaVON2_001"
+paths = save_configurations(configs, work_dir, names=names)
+
+for config, p in zip(pool, paths):
+    print(f"Saved {p['poscar'].name}: {config['atoms'].get_chemical_formula()}")
 
 # Each config dict contains:
 # - atoms: the Atoms object
@@ -304,13 +316,21 @@ vacancy_structure = defect.create_vacancy(
 ## Step 6: Visualize and Save
 
 ```python
-from ase.io import write
+from nh3sofc import save_structure, write_poscar
 from ase.visualize import view
 
-# Save structures
-write("bulk.xyz", bulk.atoms)
-write("surface.xyz", surface.atoms)
-write("oxynitride.xyz", oxynitride)  # create_oxynitride() returns Atoms directly
+# Save structures to work directory (atoms sorted by element automatically)
+work_dir = "work/surfaces/LaVO3_001"
+
+# Save in multiple formats at once
+save_structure(bulk.atoms, work_dir, "bulk", formats=["poscar", "cif"])
+save_structure(surface.atoms, work_dir, "surface", formats=["poscar", "cif"])
+save_structure(oxynitride, work_dir, "oxynitride", formats=["poscar", "cif"])
+
+# Or save individual POSCAR files
+write_poscar(bulk.atoms, f"{work_dir}/POSCAR_bulk")
+write_poscar(surface.atoms, f"{work_dir}/POSCAR_surface")
+write_poscar(oxynitride, f"{work_dir}/POSCAR_oxynitride")
 
 # Visualize (if GUI available)
 # view(oxynitride)
@@ -353,7 +373,10 @@ from nh3sofc.structure import (
     SurfaceBuilder,
     DefectBuilder
 )
-from ase.io import write
+from nh3sofc import write_poscar, save_configurations
+
+# Work directory for this study
+work_dir = "work/surfaces/LaVON2_001_LaO"
 
 # 1. Load bulk perovskite
 bulk = BulkStructure.from_cif("LaVO3.cif")
@@ -376,6 +399,9 @@ surface = builder.create_symmetric_slab(
 polarity = surface.check_polarity()
 print(f"Dipole: {polarity['dipole_z']:.2f} e·Å")
 
+# Save the clean surface (atoms sorted by element automatically)
+write_poscar(surface.atoms, f"{work_dir}/POSCAR_clean")
+
 # 5. Generate oxynitride configuration pool
 defect = DefectBuilder(surface)
 pool = defect.create_oxynitride_pool(
@@ -386,11 +412,16 @@ pool = defect.create_oxynitride_pool(
 
 print(f"Generated {len(pool)} configurations")
 
-# 6. Save all configurations
-for config in pool:
-    filename = f"LaVON2_{config['placement']}_{config['config_id']}.xyz"
-    write(filename, config['atoms'])
-    print(f"Saved {filename}: {config['atoms'].get_chemical_formula()}")
+# 6. Save all configurations as POSCAR files (atoms sorted automatically)
+configs = [config['atoms'] for config in pool]
+names = [f"{config['placement']}_{config['config_id']}" for config in pool]
+
+paths = save_configurations(configs, work_dir, names=names)
+
+for config, p in zip(pool, paths):
+    print(f"Saved {p['poscar'].name}: {config['atoms'].get_chemical_formula()}")
+
+print(f"\nAll configurations saved to: {work_dir}")
 ```
 
 ## Next Steps

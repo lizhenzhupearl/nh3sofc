@@ -25,8 +25,8 @@ This tutorial covers 6 different methods for placing adsorbate molecules on surf
 from ase.io import read
 from nh3sofc.structure import AdsorbatePlacer
 
-# Load your surface
-surface = read("relaxed_surface.xyz")
+# Load your surface (POSCAR or CIF format recommended)
+surface = read("work/surfaces/LaVO3_001/surface.vasp", format="vasp")
 
 # Create placer
 placer = AdsorbatePlacer(surface)
@@ -164,11 +164,12 @@ print(f"Unique configurations: {len(unique_configs)}")
 ## Complete Example
 
 ```python
-from ase.io import read, write
+from ase.io import read
 from nh3sofc.structure import AdsorbatePlacer
+from nh3sofc import save_configurations
 
-# Load surface
-surface = read("surface.xyz")
+# Load surface (from previous surface building step)
+surface = read("work/surfaces/LaVO3_001/surface.vasp", format="vasp")
 
 # Create placer
 placer = AdsorbatePlacer(surface)
@@ -182,11 +183,13 @@ v_configs = placer.add_on_site("NH3", site_type="ontop", atom_types=["V"])
 # Combine all configs
 all_configs = la_configs + v_configs
 
-# Save for calculations
-for i, config in enumerate(all_configs):
-    write(f"nh3_config_{i:03d}.xyz", config)
+# Save all configurations (atoms sorted by element automatically)
+work_dir = "work/adsorbates/NH3_on_LaVO3_001"
+paths = save_configurations(all_configs, work_dir, name_prefix="config")
 
 print(f"Generated {len(all_configs)} configurations")
+print(f"Saved to: {work_dir}")
+# Creates: config_001.vasp, config_002.vasp, ...
 ```
 
 ## Next Steps

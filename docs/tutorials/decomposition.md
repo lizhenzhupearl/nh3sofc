@@ -28,9 +28,10 @@ First, we need an optimized NH3 on surface structure:
 ```python
 from ase.io import read
 from nh3sofc.structure import AdsorbatePlacer
+from nh3sofc import write_poscar
 
-# Load your relaxed surface
-surface = read("relaxed_surface.traj")
+# Load your relaxed surface (POSCAR format)
+surface = read("work/surfaces/LaVO3_001/relaxed.vasp", format="vasp")
 
 # Add NH3
 placer = AdsorbatePlacer(surface)
@@ -38,6 +39,10 @@ nh3_configs = placer.add_on_site("NH3", site_type="ontop", height=2.0)
 
 # Use the first configuration
 nh3_on_slab = nh3_configs[0]
+
+# Save initial NH3/surface structure (atoms sorted by element automatically)
+work_dir = "work/decomposition/LaVO3_001"
+write_poscar(nh3_on_slab, f"{work_dir}/NH3_initial.vasp")
 ```
 
 **Important**: For accurate decomposition energetics, the initial NH3* structure should be fully optimized.
@@ -120,10 +125,10 @@ for step, paths in file_paths.items():
 ### Directory Structure
 
 ```
-decomposition_study/
-├── initial_configs/          # Initial structures
-│   ├── NH3.xyz
-│   ├── NH2_H_000.xyz
+work/decomposition/LaVO3_001/
+├── initial_configs/          # Initial structures (POSCAR format)
+│   ├── POSCAR_NH3
+│   ├── POSCAR_NH2_H_000
 │   └── ...
 ├── NH3/                      # NH3* calculations
 │   └── config_000/
@@ -337,24 +342,26 @@ for i, (name, span) in enumerate(ranking, 1):
 """Complete NH3 decomposition workflow."""
 
 from ase.io import read
-from nh3sofc.structure import AdsorbatePlacer
 from nh3sofc.workflows import DecompositionWorkflow
 from nh3sofc.analysis import RDSAnalyzer, SurfaceComparator
 
+# Work directory for this study
+work_dir = "work/decomposition/LaVO3_001_LaO"
+
 # 1. Load relaxed NH3/surface (from previous calculation)
-nh3_on_slab = read("relaxed_nh3_on_surface.traj")
+nh3_on_slab = read("work/adsorbates/NH3_on_LaVO3_001/relaxed.vasp", format="vasp")
 
 # 2. Set up workflow
 workflow = DecompositionWorkflow(
     nh3_on_slab=nh3_on_slab,
-    work_dir="./decomposition",
+    work_dir=work_dir,
     n_configs_per_step=5,
     encut=520,
     hubbard_u={"V": 3.25},
     vdw="D3BJ",
 )
 
-# 3. Setup calculations
+# 3. Setup calculations (generates POSCAR files with atoms sorted by element)
 workflow.setup()
 
 # 4. After calculations complete...
