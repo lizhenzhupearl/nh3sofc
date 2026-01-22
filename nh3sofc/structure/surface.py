@@ -1140,7 +1140,7 @@ class SurfaceBuilder:
         ... )
         """
         # Create oversized slab to have enough layers for trimming
-        oversized_layers = max(layers + 4, 10)
+        oversized_layers = layers + 4
 
         # Use base SurfaceBuilder.create_surface to avoid recursion in subclasses
         oversized = SurfaceBuilder.create_surface(
@@ -1157,11 +1157,11 @@ class SurfaceBuilder:
                 oversized, min_layers, tolerance
             )
             if slab is None:
-                # Try with larger slab
+                # Try with larger slab using oversized_layers
                 oversized = SurfaceBuilder.create_surface(
                     self,
                     miller_index=miller_index,
-                    layers=oversized_layers + 6,
+                    layers=oversized_layers,
                     vacuum=vacuum,
                     fix_bottom=0,
                 )
@@ -1183,11 +1183,11 @@ class SurfaceBuilder:
                     tolerance=tolerance,
                 )
             except ValueError:
-                # Fallback: try with even larger slab
+                # Fallback: try with oversized_layers again
                 oversized = SurfaceBuilder.create_surface(
                     self,
                     miller_index=miller_index,
-                    layers=oversized_layers + 6,
+                    layers=oversized_layers,
                     vacuum=vacuum,
                     fix_bottom=0,
                 )

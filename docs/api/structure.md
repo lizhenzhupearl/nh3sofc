@@ -254,6 +254,7 @@ create_oxynitride(
     nitrogen_fraction: float = 0.67,
     vacancy_concentration: float = 0.0,
     vacancy_element: str = "N",
+    placement: str = "random",
     random_seed: int = None
 ) -> Atoms
 ```
@@ -267,17 +268,84 @@ Create oxynitride by substituting O with N and creating vacancies.
 | `nitrogen_fraction` | `float` | `0.67` | Fraction of O to replace with N |
 | `vacancy_concentration` | `float` | `0.0` | Fraction of anion sites to leave vacant |
 | `vacancy_element` | `str` | `"N"` | Element to create vacancies in ("N" or "O") |
+| `placement` | `str` | `"random"` | Defect placement strategy (see below) |
 | `random_seed` | `int` | `None` | Random seed for reproducibility |
+
+**Placement strategies:**
+
+| Strategy | Description |
+|----------|-------------|
+| `"random"` | Random placement throughout structure |
+| `"surface"` | Preferentially place defects near surface (high z) |
+| `"near_N"` | Place vacancies near existing N atoms |
 
 **Example:**
 
 ```python
 defect = DefectBuilder(surface)
+
+# Random placement (default)
 oxynitride = defect.create_oxynitride(
-    nitrogen_fraction=0.67,      # 2/3 O → N
-    vacancy_concentration=0.10   # 10% vacancies
+    nitrogen_fraction=0.67,
+    vacancy_concentration=0.10
 )
-print(f"Formula: {oxynitride.get_chemical_formula()}")  # Returns Atoms directly
+
+# Surface-populated defects
+oxynitride_surface = defect.create_oxynitride(
+    nitrogen_fraction=0.67,
+    vacancy_concentration=0.10,
+    placement="surface"
+)
+```
+
+#### create_oxynitride_pool
+
+```python
+create_oxynitride_pool(
+    nitrogen_fraction: float = 0.67,
+    vacancy_concentration: float = 0.0,
+    vacancy_element: str = "N",
+    n_configs_per_strategy: int = 3,
+    strategies: List[str] = None,
+    random_seed: int = None
+) -> List[Dict]
+```
+
+Generate a pool of oxynitride configurations with different placement strategies.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `nitrogen_fraction` | `float` | `0.67` | Fraction of O to replace with N |
+| `vacancy_concentration` | `float` | `0.0` | Fraction of anion sites to leave vacant |
+| `vacancy_element` | `str` | `"N"` | Element to create vacancies in |
+| `n_configs_per_strategy` | `int` | `3` | Configurations per strategy |
+| `strategies` | `List[str]` | `["random", "surface", "near_N"]` | Strategies to use |
+| `random_seed` | `int` | `None` | Base random seed |
+
+**Returns:**
+
+```python
+[{
+    "atoms": Atoms,
+    "placement": str,
+    "nitrogen_fraction": float,
+    "vacancy_concentration": float,
+    "config_id": int,
+}, ...]
+```
+
+**Example:**
+
+```python
+defect = DefectBuilder(surface)
+pool = defect.create_oxynitride_pool(
+    nitrogen_fraction=0.67,
+    vacancy_concentration=0.1,
+    n_configs_per_strategy=5
+)
+print(f"Generated {len(pool)} configurations")  # 15 configs (5 x 3 strategies)
 ```
 
 #### create_vacancy

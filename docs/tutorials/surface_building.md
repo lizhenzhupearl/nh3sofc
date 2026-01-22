@@ -219,7 +219,7 @@ for layer in layers:
     print(f"z={layer['z']:.1f}: {layer['composition']}")
 ```
 
-## Step 6: Create Oxynitride Structure
+## Step 5: Create Oxynitride Structure
 
 ```python
 from nh3sofc.structure import DefectBuilder
@@ -235,6 +235,53 @@ oxynitride = defect.create_oxynitride(
 print(f"Formula: {oxynitride.get_chemical_formula()}")
 ```
 
+### Defect Placement Strategies
+
+Control where defects are placed using the `placement` parameter:
+
+```python
+# Random placement (default)
+oxynitride_random = defect.create_oxynitride(
+    nitrogen_fraction=0.67,
+    vacancy_concentration=0.10,
+    placement="random"
+)
+
+# Surface-populated: defects preferentially near surface
+oxynitride_surface = defect.create_oxynitride(
+    nitrogen_fraction=0.67,
+    vacancy_concentration=0.10,
+    placement="surface"
+)
+
+# Near-N: vacancies placed near existing N atoms
+oxynitride_near_n = defect.create_oxynitride(
+    nitrogen_fraction=0.67,
+    vacancy_concentration=0.10,
+    placement="near_N"
+)
+```
+
+### Generate Configuration Pool
+
+For screening studies, generate multiple configurations with all strategies:
+
+```python
+# Generate pool of candidate structures
+pool = defect.create_oxynitride_pool(
+    nitrogen_fraction=0.67,
+    vacancy_concentration=0.10,
+    n_configs_per_strategy=5,  # 5 configs × 3 strategies = 15 total
+)
+
+print(f"Generated {len(pool)} configurations")
+
+# Save all configurations
+for config in pool:
+    filename = f"oxynitride_{config['placement']}_{config['config_id']}.xyz"
+    write(filename, config['atoms'])
+```
+
 ### Create Specific Vacancies
 
 ```python
@@ -245,7 +292,7 @@ vacancy_structure = defect.create_vacancy(
 )
 ```
 
-## Step 7: Visualize and Save
+## Step 6: Visualize and Save
 
 ```python
 from ase.io import write

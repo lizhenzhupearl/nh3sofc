@@ -152,11 +152,97 @@ class DefectBuilder:
 
         return new_atoms
 
+    def _get_surface_indices(
+        self,
+        indices: List[int],
+        surface_fraction: float = 0.3,
+    ) -> Tuple[List[int], List[int]]:
+        """
+        Split indices into surface and bulk based on z-position.
+
+        Parameters
+        ----------
+        indices : list
+            Atom indices to split
+        surface_fraction : float
+            Fraction of slab height considered as surface region
+
+        Returns
+        -------
+        tuple
+            (surface_indices, bulk_indices)
+        """
+        z_positions = self.atoms.positions[:, 2]
+        z_min, z_max = z_positions.min(), z_positions.max()
+        z_cutoff = z_max - surface_fraction * (z_max - z_min)
+
+        surface_indices = [i for i in indices if z_positions[i] >= z_cutoff]
+        bulk_indices = [i for i in indices if z_positions[i] < z_cutoff]
+
+        return surface_indices, bulk_indices
+
+    def _select_with_placement(
+        self,
+        candidates: List[int],
+        n_select: int,
+        placement: str = "random",
+        n_positions: Optional[np.ndarray] = None,
+    ) -> List[int]:
+        """
+        Select atoms based on placement strategy.
+
+        Parameters
+        ----------
+        candidates : list
+            Candidate atom indices
+        n_select : int
+            Number of atoms to select
+        placement : str
+            Placement strategy: "random", "surface", or "near_N"
+        n_positions : ndarray, optional
+            Positions of N atoms (required for "near_N" placement)
+
+        Returns
+        -------
+        list
+            Selected atom indices
+        """
+        if n_select <= 0 or not candidates:
+            return []
+
+        n_select = min(n_select, len(candidates))
+
+        if placement == "random":
+            return np.random.choice(candidates, size=n_select, replace=False).tolist()
+
+        elif placement == "surface":
+            # Sort by z-position (descending) and prefer surface atoms
+            z_positions = self.atoms.positions[:, 2]
+            sorted_candidates = sorted(candidates, key=lambda i: -z_positions[i])
+            return sorted_candidates[:n_select]
+
+        elif placement == "near_N" and n_positions is not None and len(n_positions) > 0:
+            # Sort by minimum distance to any N atom
+            positions = self.atoms.positions
+            distances = []
+            for idx in candidates:
+                pos = positions[idx]
+                min_dist = np.min(np.linalg.norm(n_positions - pos, axis=1))
+                distances.append((idx, min_dist))
+            # Sort by distance (ascending) - closer to N preferred
+            sorted_by_dist = sorted(distances, key=lambda x: x[1])
+            return [idx for idx, _ in sorted_by_dist[:n_select]]
+
+        else:
+            # Fallback to random
+            return np.random.choice(candidates, size=n_select, replace=False).tolist()
+
     def create_oxynitride(
         self,
         nitrogen_fraction: float = 0.67,
         vacancy_concentration: float = 0.0,
         vacancy_element: str = "N",
+        placement: str = "random",
         random_seed: Optional[int] = None,
     ) -> Atoms:
         """
@@ -174,6 +260,11 @@ class DefectBuilder:
             Fraction of anion sites to leave vacant (parameter x)
         vacancy_element : str
             Element to create vacancies in ("N" or "O")
+        placement : str
+            Defect placement strategy:
+            - "random": Random placement (default)
+            - "surface": Preferentially place defects near surface
+            - "near_N": Place vacancies near existing N atoms
         random_seed : int, optional
             Random seed for reproducibility
 
@@ -187,10 +278,11 @@ class DefectBuilder:
         >>> # Create LaVON₂ (no vacancies)
         >>> oxynitride = builder.create_oxynitride(nitrogen_fraction=0.67)
         >>>
-        >>> # Create LaVON₁.₉ (10% N vacancies)
+        >>> # Create LaVON₁.₉ with surface-populated N
         >>> oxynitride = builder.create_oxynitride(
         ...     nitrogen_fraction=0.67,
-        ...     vacancy_concentration=0.1
+        ...     vacancy_concentration=0.1,
+        ...     placement="surface"
         ... )
         """
         if random_seed is not None:
@@ -201,10 +293,10 @@ class DefectBuilder:
         n_oxygen = len(o_indices)
         n_to_substitute = int(n_oxygen * nitrogen_fraction)
 
-        # Select random O atoms to convert to N
-        substitute_indices = np.random.choice(
-            o_indices, size=n_to_substitute, replace=False
-        ).tolist()
+        # Select O atoms to convert to N based on placement strategy
+        substitute_indices = self._select_with_placement(
+            o_indices, n_to_substitute, placement
+        )
 
         new_atoms = self.atoms.copy()
         symbols = list(new_atoms.get_chemical_symbols())
@@ -228,16 +320,103 @@ class DefectBuilder:
             if n_vacancies == 0 and vacancy_concentration > 0:
                 n_vacancies = 1
 
-            vacancy_indices = np.random.choice(
-                vacancy_candidates, size=min(n_vacancies, len(vacancy_candidates)),
-                replace=False
-            ).tolist()
+            # For near_N placement, get N positions
+            n_positions = None
+            if placement == "near_N":
+                n_positions = new_atoms.positions[substitute_indices]
+
+            vacancy_indices = self._select_with_placement(
+                vacancy_candidates, n_vacancies, placement, n_positions
+            )
 
             # Remove vacancy atoms
             keep_indices = [i for i in range(len(new_atoms)) if i not in vacancy_indices]
             new_atoms = new_atoms[keep_indices]
 
         return new_atoms
+
+    def create_oxynitride_pool(
+        self,
+        nitrogen_fraction: float = 0.67,
+        vacancy_concentration: float = 0.0,
+        vacancy_element: str = "N",
+        n_configs_per_strategy: int = 3,
+        strategies: Optional[List[str]] = None,
+        random_seed: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate a pool of oxynitride configurations with different placement strategies.
+
+        Creates multiple configurations for each placement strategy to explore
+        different defect distributions.
+
+        Parameters
+        ----------
+        nitrogen_fraction : float
+            Fraction of O atoms to replace with N (0.0 to 1.0)
+        vacancy_concentration : float
+            Fraction of anion sites to leave vacant
+        vacancy_element : str
+            Element to create vacancies in ("N" or "O")
+        n_configs_per_strategy : int
+            Number of random configurations per strategy
+        strategies : list, optional
+            List of strategies to use. Default: ["random", "surface", "near_N"]
+        random_seed : int, optional
+            Base random seed for reproducibility
+
+        Returns
+        -------
+        list of dict
+            List of configurations:
+            [{
+                "atoms": Atoms,
+                "placement": str,
+                "nitrogen_fraction": float,
+                "vacancy_concentration": float,
+                "config_id": int,
+            }, ...]
+
+        Examples
+        --------
+        >>> builder = DefectBuilder(surface)
+        >>> pool = builder.create_oxynitride_pool(
+        ...     nitrogen_fraction=0.67,
+        ...     vacancy_concentration=0.1,
+        ...     n_configs_per_strategy=5
+        ... )
+        >>> print(f"Generated {len(pool)} configurations")
+        """
+        if strategies is None:
+            strategies = ["random", "surface", "near_N"]
+
+        results = []
+        config_id = 0
+
+        for strategy in strategies:
+            for i in range(n_configs_per_strategy):
+                seed = None
+                if random_seed is not None:
+                    seed = random_seed + config_id
+
+                atoms = self.create_oxynitride(
+                    nitrogen_fraction=nitrogen_fraction,
+                    vacancy_concentration=vacancy_concentration,
+                    vacancy_element=vacancy_element,
+                    placement=strategy,
+                    random_seed=seed,
+                )
+
+                results.append({
+                    "atoms": atoms,
+                    "placement": strategy,
+                    "nitrogen_fraction": nitrogen_fraction,
+                    "vacancy_concentration": vacancy_concentration,
+                    "config_id": config_id,
+                })
+                config_id += 1
+
+        return results
 
     def create_multiple_oxynitrides(
         self,
