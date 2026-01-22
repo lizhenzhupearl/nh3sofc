@@ -1151,27 +1151,51 @@ class SurfaceBuilder:
             fix_bottom=0,  # Will apply constraints after trimming
         )
 
-        # Trim to symmetric termination
-        try:
-            slab = oversized.trim_to_symmetric_termination(
-                termination=termination,
-                min_layers=min_layers,
-                tolerance=tolerance,
+        # If no termination specified, find best one automatically
+        if termination is None:
+            slab = self._find_best_symmetric_termination(
+                oversized, min_layers, tolerance
             )
-        except ValueError:
-            # Fallback: try with even larger slab
-            oversized = SurfaceBuilder.create_surface(
-                self,
-                miller_index=miller_index,
-                layers=oversized_layers + 4,
-                vacuum=vacuum,
-                fix_bottom=0,
-            )
-            slab = oversized.trim_to_symmetric_termination(
-                termination=termination,
-                min_layers=min_layers,
-                tolerance=tolerance,
-            )
+            if slab is None:
+                # Try with larger slab
+                oversized = SurfaceBuilder.create_surface(
+                    self,
+                    miller_index=miller_index,
+                    layers=oversized_layers + 6,
+                    vacuum=vacuum,
+                    fix_bottom=0,
+                )
+                slab = self._find_best_symmetric_termination(
+                    oversized, min_layers, tolerance
+                )
+            if slab is None:
+                raise ValueError(
+                    "Could not find any termination that creates a symmetric slab. "
+                    "Try specifying a termination explicitly, e.g., "
+                    "termination={'La': 1, 'O': 1} or termination={'V': 1, 'O': 2}"
+                )
+        else:
+            # Use specified termination
+            try:
+                slab = oversized.trim_to_symmetric_termination(
+                    termination=termination,
+                    min_layers=min_layers,
+                    tolerance=tolerance,
+                )
+            except ValueError:
+                # Fallback: try with even larger slab
+                oversized = SurfaceBuilder.create_surface(
+                    self,
+                    miller_index=miller_index,
+                    layers=oversized_layers + 6,
+                    vacuum=vacuum,
+                    fix_bottom=0,
+                )
+                slab = oversized.trim_to_symmetric_termination(
+                    termination=termination,
+                    min_layers=min_layers,
+                    tolerance=tolerance,
+                )
 
         # Add vacuum and center
         slab = slab.add_vacuum(vacuum)
@@ -1186,6 +1210,54 @@ class SurfaceBuilder:
             slab.fix_bottom_layers(fix_bottom)
 
         return slab
+
+    def _find_best_symmetric_termination(
+        self,
+        slab: SlabStructure,
+        min_layers: int,
+        tolerance: Union[float, str],
+    ) -> Optional[SlabStructure]:
+        """
+        Try all unique layer compositions and find the best symmetric slab.
+
+        Returns the symmetric slab with the most layers, or None if no
+        valid symmetric termination is found.
+        """
+        layers = slab.identify_layers(tolerance)
+
+        # Get unique layer compositions
+        unique_compositions = []
+        seen_ratios = []
+        for layer in layers:
+            comp = layer["composition"]
+            if not comp:
+                continue
+            # Normalize to ratio for comparison
+            min_val = min(comp.values())
+            ratio = tuple(sorted((k, v / min_val) for k, v in comp.items()))
+            if ratio not in seen_ratios:
+                seen_ratios.append(ratio)
+                unique_compositions.append(comp)
+
+        # Try each composition and keep the best result
+        best_slab = None
+        best_n_layers = 0
+
+        for comp in unique_compositions:
+            try:
+                trimmed = slab.trim_to_symmetric_termination(
+                    termination=comp,
+                    min_layers=min_layers,
+                    tolerance=tolerance,
+                )
+                n_layers = len(trimmed.identify_layers(tolerance))
+                if n_layers > best_n_layers:
+                    best_n_layers = n_layers
+                    best_slab = trimmed
+            except ValueError:
+                continue
+
+        return best_slab
 
 
 class PerovskiteSurfaceBuilder(SurfaceBuilder):

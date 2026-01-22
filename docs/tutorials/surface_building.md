@@ -140,7 +140,7 @@ print(f"Dipole after symmetrization: {polarity['dipole_z']:.2f} e·Å")
 
 #### Requesting Specific Terminations
 
-You can request a specific termination for your symmetric slab:
+You can request a specific termination for your symmetric slab. The termination is specified as an **element ratio**, so `{"La": 1, "O": 1}` and `{"La": 8, "O": 8}` give identical results:
 
 ```python
 # Create LaO-terminated symmetric slab
@@ -148,7 +148,7 @@ lao_symmetric = builder.create_symmetric_slab(
     miller_index=(0, 0, 1),
     layers=7,
     vacuum=15.0,
-    termination={"La": 1, "O": 1},  # LaO composition ratio
+    termination={"La": 1, "O": 1},  # LaO composition ratio (1:1)
     min_layers=5,
     fix_bottom=2
 )
@@ -158,11 +158,13 @@ vo2_symmetric = builder.create_symmetric_slab(
     miller_index=(0, 0, 1),
     layers=7,
     vacuum=15.0,
-    termination={"V": 1, "O": 2},  # VO2 composition ratio
+    termination={"V": 1, "O": 2},  # VO2 composition ratio (1:2)
     min_layers=5,
     fix_bottom=2
 )
 ```
+
+When no termination is specified, the builder automatically tries all unique layer compositions and picks the one that creates the best symmetric slab (most layers). This usually works well, but for precise control, specifying the termination explicitly is recommended.
 
 #### Manual Trimming for Fine Control
 

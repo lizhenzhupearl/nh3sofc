@@ -412,3 +412,73 @@ class TestSymmetricSlabTrimming:
         for comp, name in [(top_comp, "Top"), (bottom_comp, "Bottom")]:
             assert "La" in comp, f"{name} should have La: {comp}"
             assert "O" in comp, f"{name} should have O: {comp}"
+
+    def test_symmetric_slab_auto_finds_best_termination(self, perovskite_bulk):
+        """create_symmetric_slab() without termination should auto-find valid one."""
+        from nh3sofc.structure import SurfaceBuilder
+
+        builder = SurfaceBuilder(perovskite_bulk)
+
+        # Without specifying termination, should still create symmetric slab
+        slab = builder.create_symmetric_slab(
+            miller_index=(0, 0, 1),
+            layers=7,
+            vacuum=15.0,
+            fix_bottom=0,
+        )
+
+        layers = slab.identify_layers()
+        top_comp = layers[-1]["composition"]
+        bottom_comp = layers[0]["composition"]
+
+        # Get element ratios
+        def get_ratios(comp):
+            if not comp:
+                return {}
+            min_val = min(comp.values())
+            return {k: v / min_val for k, v in comp.items()}
+
+        top_ratios = get_ratios(top_comp)
+        bottom_ratios = get_ratios(bottom_comp)
+
+        # Must have same elements and ratios
+        assert set(top_ratios.keys()) == set(bottom_ratios.keys()), \
+            f"Top {top_comp} and bottom {bottom_comp} have different elements"
+        for elem in top_ratios:
+            assert abs(top_ratios[elem] - bottom_ratios[elem]) < 0.1, \
+                f"Element {elem} ratio differs"
+
+    def test_termination_ratio_equivalence(self, perovskite_bulk):
+        """{"La": 1, "O": 1} and {"La": 8, "O": 8} should give same results."""
+        from nh3sofc.structure import SurfaceBuilder
+
+        builder = SurfaceBuilder(perovskite_bulk)
+
+        # Create slab first
+        slab = builder.create_surface(
+            miller_index=(0, 0, 1),
+            layers=10,
+            vacuum=15.0,
+        )
+
+        # Trim with ratio 1:1
+        sym1 = slab.trim_to_symmetric_termination(
+            termination={"La": 1, "O": 1},
+            min_layers=5,
+        )
+
+        # Trim with ratio 8:8 (same as 1:1)
+        sym8 = slab.trim_to_symmetric_termination(
+            termination={"La": 8, "O": 8},
+            min_layers=5,
+        )
+
+        # Should have same number of atoms
+        assert len(sym1.atoms) == len(sym8.atoms), \
+            f"Different atom counts: {len(sym1.atoms)} vs {len(sym8.atoms)}"
+
+        # Should have same layer count
+        layers1 = sym1.identify_layers()
+        layers8 = sym8.identify_layers()
+        assert len(layers1) == len(layers8), \
+            f"Different layer counts: {len(layers1)} vs {len(layers8)}"
