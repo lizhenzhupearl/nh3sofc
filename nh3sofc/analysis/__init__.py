@@ -1,10 +1,11 @@
-"""Analysis modules for energetics and thermochemistry.
+"""Analysis modules for energetics, thermochemistry, and electronic structure.
 
 Provides tools for:
 - Adsorption energy calculations
 - Gibbs free energy and thermochemistry
 - Rate-determining step identification
 - Surface comparison and catalyst screening
+- Electronic structure descriptors (d-band center)
 """
 
 from .energetics import (
@@ -48,6 +49,12 @@ from .exsolution import (
     ExsolutionEnergetics,
     calculate_exsolution_driving_force,
 )
+from .electronic import (
+    DBandAnalyzer,
+    DOSAnalyzer,
+    calculate_d_band_center,
+    get_surface_d_band_center,
+)
 
 __all__ = [
     # Energetics
@@ -85,4 +92,9 @@ __all__ = [
     # Exsolution
     "ExsolutionEnergetics",
     "calculate_exsolution_driving_force",
+    # Electronic structure
+    "DBandAnalyzer",
+    "DOSAnalyzer",
+    "calculate_d_band_center",
+    "get_surface_d_band_center",
 ]

@@ -18,6 +18,14 @@ Step-by-step guides for common workflows in NH3-SOFC research.
 | [NEB Transition States](neb.md) | Find reaction barriers | 25 min |
 | [Frequency & Thermochemistry](thermochemistry.md) | ZPE, entropy, Gibbs energy | 20 min |
 
+## Analysis & Theory
+
+| Tutorial | Description | Time |
+|----------|-------------|------|
+| [Theoretical Framework](theory.md) | D-band analysis, BEP relations, energy span model | 30 min |
+| [Microkinetic Modeling](microkinetics.md) | TOF and steady-state analysis | 35 min |
+| [Surface Comparison](surface_comparison.md) | Ranking catalysts with volcano plots | 20 min |
+
 ## Advanced Topics
 
 | Tutorial | Description | Time |
@@ -25,8 +33,6 @@ Step-by-step guides for common workflows in NH3-SOFC research.
 | [Exsolution Simulation](exsolution.md) | Metal nanoparticle exsolution from perovskites | 35 min |
 | [High-Throughput Screening](screening.md) | Systematic parameter scans | 30 min |
 | [MACE ML Force Fields](mace.md) | Training and active learning | 40 min |
-| [Microkinetic Modeling](microkinetics.md) | TOF and steady-state analysis | 35 min |
-| [Surface Comparison](surface_comparison.md) | Ranking catalysts | 20 min |
 
 ## Workflow Diagrams
 

@@ -1,6 +1,113 @@
 # Analysis Module
 
-The `nh3sofc.analysis` module provides tools for analyzing calculation results.
+The `nh3sofc.analysis` module provides comprehensive tools for analyzing calculation results, including electronic structure descriptors, energetics, thermochemistry, and kinetics.
+
+## Electronic Structure Analysis
+
+### DBandAnalyzer
+
+Analyze d-band electronic structure from VASP DOSCAR files.
+
+```python
+from nh3sofc.analysis import DBandAnalyzer
+```
+
+#### Constructor
+
+```python
+DBandAnalyzer(
+    energy: np.ndarray,
+    dos_total: np.ndarray,
+    dos_projected: Dict[int, Dict[str, np.ndarray]] = None,
+    e_fermi: float = 0.0,
+    is_spin_polarized: bool = False
+)
+```
+
+#### Class Methods
+
+##### from_doscar
+
+```python
+@classmethod
+from_doscar(
+    filepath: str,
+    atoms_to_parse: List[int] = None
+) -> DBandAnalyzer
+```
+
+Create analyzer from VASP DOSCAR file.
+
+#### Methods
+
+| Method | Description |
+|--------|-------------|
+| `get_d_band_center(atom_index)` | D-band center (1st moment) in eV |
+| `get_d_band_width(atom_index)` | D-band width (2nd moment) in eV |
+| `get_d_band_filling(atom_index)` | Fraction of occupied d-states (0-1) |
+| `get_d_band_properties(atom_indices)` | Dict with center, width, filling |
+| `get_surface_average_d_band_center(indices)` | Weighted average for surface |
+
+**Example:**
+
+```python
+# Parse DOSCAR and analyze d-band
+analyzer = DBandAnalyzer.from_doscar("DOSCAR")
+
+# D-band center for atom 0
+d_center = analyzer.get_d_band_center(atom_index=0)
+print(f"D-band center: {d_center:.3f} eV")
+
+# Properties for surface atoms
+props = analyzer.get_d_band_properties([0, 1, 2, 3])
+for atom, data in props.items():
+    print(f"Atom {atom}: ε_d = {data['center']:.2f} eV")
+
+# Average for all surface atoms
+avg = analyzer.get_surface_average_d_band_center([0, 1, 2, 3])
+```
+
+---
+
+### Convenience Functions
+
+#### calculate_d_band_center
+
+```python
+calculate_d_band_center(
+    doscar_path: str,
+    atom_indices: List[int],
+    energy_range: Tuple[float, float] = None
+) -> Dict[int, float]
+```
+
+Quick calculation of d-band centers.
+
+#### get_surface_d_band_center
+
+```python
+get_surface_d_band_center(
+    doscar_path: str,
+    surface_atom_indices: List[int]
+) -> Tuple[float, Dict[int, float]]
+```
+
+Returns `(average_center, per_atom_dict)`.
+
+**Example:**
+
+```python
+from nh3sofc.analysis import calculate_d_band_center, get_surface_d_band_center
+
+# Quick calculation
+centers = calculate_d_band_center("DOSCAR", [0, 1, 2])
+
+# Surface average
+avg, per_atom = get_surface_d_band_center("DOSCAR", [0, 1, 2, 3])
+print(f"Surface ε_d = {avg:.3f} eV")
+```
+
+---
 
 ## AdsorptionEnergyCalculator
 

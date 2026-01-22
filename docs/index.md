@@ -50,6 +50,14 @@
 
     [:octicons-arrow-right-24: Exsolution Tutorial](tutorials/exsolution.md)
 
+-   :material-function-variant: **Theoretical Framework**
+
+    ---
+
+    Complete catalysis theory toolkit: d-band analysis, BEP relations, energy span model, microkinetic modeling, and volcano plots.
+
+    [:octicons-arrow-right-24: Theory Guide](tutorials/theory.md)
+
 </div>
 
 ## Key Features
@@ -88,9 +96,21 @@ Pristine → Defective → Segregated → Exsolved (with nanoparticle)
 
 - **DFT**: VASP with Hubbard U corrections, vdW-D3/D3BJ
 - **ML Force Fields**: MACE foundation models and custom training
-- **Thermochemistry**: ZPE, entropy, Gibbs free energy corrections
-- **Kinetics**: BEP relations, energy span model, microkinetic modeling
-- **Exsolution**: Vacancy formation, segregation, and particle binding energetics
+- **NEB Workflows**: Automated transition state searches with IDPP/climbing image
+
+### Theoretical Framework
+
+NH3SOFC implements a complete theoretical toolkit for computational catalysis:
+
+| Component | Description |
+|-----------|-------------|
+| **Electronic Descriptors** | D-band center, width, and filling from DOSCAR |
+| **Thermochemistry** | ZPE, entropy, Gibbs free energy (harmonic & ideal gas) |
+| **BEP Relations** | Built-in parameters for N-H, C-H, O-H dissociation |
+| **Energy Span Model** | Kozuch-Shaik TDTS/TDI identification |
+| **Microkinetics** | Steady-state solver, coverage-dependent rates, TOF |
+| **Volcano Plots** | Descriptor-activity relationships, catalyst ranking |
+| **Exsolution Energetics** | Vacancy formation, segregation, particle binding |
 
 ## Quick Example
 
