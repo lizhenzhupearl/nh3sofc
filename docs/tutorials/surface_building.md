@@ -1,11 +1,13 @@
 # Tutorial: Surface Building
 
-This tutorial covers building surfaces from bulk structures and creating oxynitride defects.
+This tutorial covers building surfaces from bulk structures, handling surface polarity, and creating oxynitride defects.
 
 ## Learning Objectives
 
 - Load bulk structures from CIF files
 - Generate surface slabs with different Miller indices
+- Handle polar surfaces (critical for perovskites)
+- Use specialized builders for different crystal structures
 - Create oxynitride structures with controlled defect concentrations
 
 ## Step 1: Load Bulk Structure
@@ -23,6 +25,8 @@ supercell = bulk.make_supercell((2, 2, 2))
 ```
 
 ## Step 2: Generate Surface Slab
+
+### Basic Surface Creation
 
 ```python
 from nh3sofc.structure import SurfaceBuilder
@@ -48,11 +52,192 @@ print(f"Cell: {surface.atoms.cell.lengths()}")
 terminations = builder.get_all_terminations((0, 0, 1))
 
 for i, term in enumerate(terminations):
-    print(f"Termination {i}: {term.get_chemical_formula()}")
+    info = builder.identify_termination(term)
+    print(f"Termination {i}: {info['composition']}")
     term.write(f"surface_term_{i}.xyz")
 ```
 
-## Step 3: Create Oxynitride Structure
+### Creating Supercells
+
+```python
+# Method 1: Using supercell parameter (recommended)
+surface = builder.create_surface_with_size(
+    miller_index=(0, 0, 1),
+    size=(2, 2, 6),  # 2x2 supercell, 6 layers
+    vacuum=15.0
+)
+
+# Method 2: Repeat after creation (preserves constraints)
+surface = builder.create_surface(
+    miller_index=(0, 0, 1),
+    layers=6,
+    fix_bottom=2
+)
+surface = surface.repeat_xy(2, 2)  # Fixed atoms are preserved
+```
+
+## Step 3: Handling Surface Polarity
+
+Many oxide surfaces are polar, meaning they have alternating charged layers that create an electric dipole. This is critical for accurate DFT calculations.
+
+### Check Surface Polarity
+
+```python
+# Analyze polarity
+polarity = surface.check_polarity()
+
+print(f"Is polar: {polarity['is_polar']}")
+print(f"Dipole (z-component): {polarity['dipole_z']:.2f} e·Å")
+print(f"Layer charges: {polarity['layer_charges']}")
+print(f"Recommendation: {polarity['recommendation']}")
+```
+
+### Analyze Layers
+
+```python
+# Identify atomic layers
+layers = surface.identify_layers(tolerance=0.5)
+
+for i, layer in enumerate(layers):
+    print(f"Layer {i}: z={layer['z']:.2f} Å, composition={layer['composition']}")
+
+# Get layer spacing
+spacings = surface.get_layer_spacing()
+print(f"Interlayer distances: {spacings}")
+```
+
+### Create Symmetric Slabs
+
+For polar surfaces, symmetric slabs (same termination on both sides) help cancel the dipole:
+
+```python
+# Create symmetric slab
+symmetric_surface = builder.create_symmetric_slab(
+    miller_index=(0, 0, 1),
+    layers=7,  # Odd number recommended
+    vacuum=15.0,
+    fix_bottom=2
+)
+
+# Verify symmetry
+polarity = symmetric_surface.check_polarity()
+print(f"Dipole after symmetrization: {polarity['dipole_z']:.2f} e·Å")
+```
+
+## Step 4: Specialized Surface Builders
+
+NH3SOFC provides specialized builders for common crystal structure types:
+
+### Perovskite Surfaces (ABO3)
+
+For LaVO3, SrTiO3, BaTiO3, etc.:
+
+```python
+from nh3sofc.structure import PerovskiteSurfaceBuilder
+
+# Create builder with automatic site detection
+builder = PerovskiteSurfaceBuilder(bulk)  # Auto-detects La as A-site, V as B-site
+
+# Or specify explicitly
+builder = PerovskiteSurfaceBuilder(bulk, A_site="La", B_site="V", anion="O")
+
+# See available terminations
+print(builder.get_termination_options((0, 0, 1)))  # ['LaO', 'VO2']
+
+# Create surface with specific termination
+surface = builder.create_surface(
+    miller_index=(0, 0, 1),
+    termination="LaO",      # Named termination
+    layers=7,
+    symmetric=True,         # Symmetric slab (recommended for polar surfaces)
+    fix_bottom=2,
+    supercell=(2, 2)        # 2x2 supercell
+)
+
+# Analyze the surface
+analysis = builder.analyze_surface(surface)
+print(f"Termination: {analysis['termination_type']}")
+print(f"Surface composition: {analysis['surface_composition']}")
+```
+
+### Rocksalt Surfaces (MX)
+
+For NiO, MgO, CoO, etc.:
+
+```python
+from nh3sofc.structure import RocksaltSurfaceBuilder
+from ase.build import bulk
+
+# Create NiO bulk
+nio = bulk('NiO', 'rocksalt', a=4.17)
+
+builder = RocksaltSurfaceBuilder(nio, cation="Ni", anion="O")
+
+# (001) and (110) are non-polar
+surface_001 = builder.create_surface(
+    miller_index=(0, 0, 1),
+    layers=6
+)
+
+# (111) is polar - use symmetric slab
+surface_111 = builder.create_surface(
+    miller_index=(1, 1, 1),
+    layers=7,
+    symmetric=True  # Important for polar (111)
+)
+```
+
+### Fluorite Surfaces (MX2)
+
+For CeO2, ZrO2, etc.:
+
+```python
+from nh3sofc.structure import FluoriteSurfaceBuilder
+from ase.build import bulk
+
+# Create CeO2 bulk
+ceo2 = bulk('CeO2', 'fluorite', a=5.41)
+
+builder = FluoriteSurfaceBuilder(ceo2, cation="Ce", anion="O")
+
+# (111) is most stable and non-polar
+surface_111 = builder.create_surface(
+    miller_index=(1, 1, 1),
+    layers=6
+)
+
+# (110) and (100) are polar
+surface_110 = builder.create_surface(
+    miller_index=(1, 1, 0),
+    symmetric=True  # Needed for polar surfaces
+)
+```
+
+## Step 5: Stoichiometry Validation
+
+Check if your surface has the expected composition:
+
+```python
+# Get stoichiometry
+stoich = surface.get_stoichiometry()
+print(f"Normalized stoichiometry: {stoich}")
+
+# Check against expected
+result = surface.check_stoichiometry(
+    expected={"La": 1, "V": 1, "O": 3},
+    tolerance=0.1
+)
+print(f"Is stoichiometric: {result['is_stoichiometric']}")
+if result['warnings']:
+    print(f"Warnings: {result['warnings']}")
+
+# Layer-by-layer stoichiometry
+layers = surface.get_layer_stoichiometry()
+for layer in layers:
+    print(f"z={layer['z']:.1f}: {layer['composition']}")
+```
+
+## Step 6: Create Oxynitride Structure
 
 ```python
 from nh3sofc.structure import DefectBuilder
@@ -79,7 +264,7 @@ vacancy_structure = defect.create_vacancy(
 )
 ```
 
-## Step 4: Visualize and Save
+## Step 7: Visualize and Save
 
 ```python
 from ase.io import write
@@ -96,37 +281,78 @@ write("oxynitride.xyz", oxynitride.atoms)
 
 ## Best Practices
 
-1. **Check symmetry** - Verify surface symmetry after creation
-2. **Sufficient layers** - Use at least 4-6 layers for accurate surface properties
-3. **Vacuum spacing** - 15 Å is typically sufficient to avoid image interactions
-4. **Fix bottom atoms** - Fix 2-3 bottom layers to simulate bulk behavior
+### Surface Construction
+
+1. **Check polarity** - Always check if your surface is polar using `check_polarity()`
+2. **Use symmetric slabs** - For polar surfaces, use `symmetric=True` or `create_symmetric_slab()`
+3. **Sufficient layers** - Use at least 5-7 layers for accurate surface properties
+4. **Vacuum spacing** - 15-20 Å is typically sufficient to avoid image interactions
+5. **Fix bottom atoms** - Fix 2-3 bottom layers to simulate bulk behavior
+
+### Polarity Handling
+
+| Surface Type | Polarity | Recommendation |
+|-------------|----------|----------------|
+| Perovskite (001) | Polar | Use symmetric slab or dipole correction |
+| Perovskite (110) | Polar | Use symmetric slab |
+| Rocksalt (001) | Non-polar | Standard slab OK |
+| Rocksalt (111) | Polar | Use symmetric slab |
+| Fluorite (111) | Non-polar | Standard slab OK |
+| Fluorite (110) | Polar | Use symmetric slab |
+
+### VASP Settings for Polar Surfaces
+
+If you cannot use a symmetric slab, add dipole corrections to VASP:
+
+```python
+from nh3sofc.calculators.vasp import VASPInputGenerator
+
+vasp = VASPInputGenerator(surface.atoms, calc_type="relax")
+vasp.set_surface_settings()  # Adds IDIPOL=3, LDIPOL=.TRUE.
+```
 
 ## Complete Example
 
 ```python
-from nh3sofc.structure import BulkStructure, SurfaceBuilder, DefectBuilder
+from nh3sofc.structure import (
+    BulkStructure,
+    PerovskiteSurfaceBuilder,
+    DefectBuilder
+)
 from ase.io import write
 
-# 1. Load bulk
+# 1. Load bulk perovskite
 bulk = BulkStructure.from_cif("LaVO3.cif")
 
-# 2. Create surface
-builder = SurfaceBuilder(bulk)
+# 2. Create surface with specialized builder
+builder = PerovskiteSurfaceBuilder(bulk, A_site="La", B_site="V")
+
 surface = builder.create_surface(
     miller_index=(0, 0, 1),
-    layers=6,
-    vacuum=15.0,
+    termination="LaO",
+    layers=7,
+    symmetric=True,
+    fix_bottom=2,
+    supercell=(2, 2)
 )
 
-# 3. Create oxynitride
+# 3. Check polarity
+polarity = surface.check_polarity()
+print(f"Dipole: {polarity['dipole_z']:.2f} e·Å")
+
+# 4. Create oxynitride
 defect = DefectBuilder(surface)
 oxynitride = defect.create_oxynitride(
     nitrogen_fraction=0.67,
     vacancy_concentration=0.10,
 )
 
-# 4. Save
-write("LaVON2_001.xyz", oxynitride.atoms)
+# 5. Validate stoichiometry
+stoich = oxynitride.check_stoichiometry()
+print(f"Final composition: {oxynitride.formula}")
+
+# 6. Save
+write("LaVON2_001_symmetric.xyz", oxynitride.atoms)
 ```
 
 ## Next Steps

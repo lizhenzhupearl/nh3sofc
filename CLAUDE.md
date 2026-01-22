@@ -62,9 +62,55 @@ Plans represent significant intellectual work and decision-making. They serve as
 
 ## Testing
 
-- Verify imports work after adding new modules
-- Run functional tests for new features
-- Check backward compatibility when modifying APIs
+### Run Tests Before and After Changes
+
+The `tests/` directory contains automated tests. **Always run tests** to verify changes work:
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run with verbose output
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_regressions.py
+```
+
+### Test Structure
+
+| File | Purpose |
+|------|---------|
+| `tests/conftest.py` | Shared fixtures (mock structures) |
+| `tests/test_smoke.py` | Basic imports and instantiation |
+| `tests/test_regressions.py` | Tests for bugs that were fixed |
+
+### When Developing
+
+1. **After making changes:** Run `pytest tests/` to catch regressions
+2. **When fixing a bug:** Add a regression test to `tests/test_regressions.py`
+3. **When adding features:** Add smoke tests for new classes/methods
+
+### Adding Regression Tests
+
+When fixing a bug, add a test to `tests/test_regressions.py`:
+
+```python
+class TestYourBugFix:
+    """
+    Bug: [Description of the bug]
+    Fix: [How it was fixed]
+    Date fixed: YYYY-MM-DD
+    """
+
+    def test_bug_is_fixed(self, fixture):
+        # Test that verifies the fix works
+        assert result == expected
+```
+
+### CI/CD
+
+GitHub Actions runs tests automatically on push/PR to `main`. See `.github/workflows/ci.yml`.
 
 ## Documentation
 
@@ -82,8 +128,17 @@ nh3sofc/
 ├── workflows/      # Automated calculation workflows
 └── database/       # Naming conventions, ASE DB
 
+tests/
+├── conftest.py     # Shared fixtures
+├── test_smoke.py   # Import and basic tests
+└── test_regressions.py  # Tests for fixed bugs
+
 docs/
 ├── plans/          # Implementation plans (SAVE PLANS HERE!)
 ├── tutorials/      # Step-by-step guides
 └── api/            # API reference
+
+.github/workflows/
+├── ci.yml          # Run tests on push/PR
+└── docs.yml        # Deploy documentation
 ```

@@ -140,6 +140,268 @@ get_all_terminations(miller_index: tuple) -> List[Atoms]
 
 Get all possible terminations for a surface.
 
+#### create_symmetric_slab
+
+```python
+create_symmetric_slab(
+    miller_index: tuple,
+    layers: int = 7,
+    vacuum: float = 15.0,
+    fix_bottom: int = 2
+) -> SlabStructure
+```
+
+Create symmetric slab with same termination on both surfaces (helps cancel dipole).
+
+---
+
+## SlabStructure
+
+Surface slab structure with polarity and layer analysis methods.
+
+```python
+from nh3sofc.structure import SlabStructure
+```
+
+### Polarity Methods
+
+#### check_polarity
+
+```python
+check_polarity(
+    formal_charges: dict = None,
+    tolerance: float = 0.5
+) -> dict
+```
+
+Check if surface is polar.
+
+**Returns:**
+
+```python
+{
+    "is_polar": bool,
+    "dipole_moment": float,  # e·Å
+    "dipole_z": float,       # z-component
+    "top_layer_charge": float,
+    "bottom_layer_charge": float,
+    "layer_charges": list,
+    "recommendation": str
+}
+```
+
+#### calculate_dipole_moment
+
+```python
+calculate_dipole_moment(formal_charges: dict = None) -> tuple
+```
+
+Calculate electric dipole moment. Returns `(magnitude, direction_vector)`.
+
+### Layer Analysis Methods
+
+#### identify_layers
+
+```python
+identify_layers(tolerance: float = 0.5) -> List[dict]
+```
+
+Identify atomic layers. Returns list of layer info dicts.
+
+#### get_layer_spacing
+
+```python
+get_layer_spacing() -> List[float]
+```
+
+Get interlayer distances in Angstrom.
+
+### Stoichiometry Methods
+
+#### check_stoichiometry
+
+```python
+check_stoichiometry(
+    expected: dict = None,
+    tolerance: float = 0.1
+) -> dict
+```
+
+Check if stoichiometry matches expected.
+
+---
+
+## PerovskiteSurfaceBuilder
+
+Specialized builder for ABO3 perovskite surfaces (LaVO3, SrTiO3, etc.).
+
+```python
+from nh3sofc.structure import PerovskiteSurfaceBuilder
+```
+
+### Constructor
+
+```python
+PerovskiteSurfaceBuilder(
+    bulk: Union[BulkStructure, Atoms],
+    A_site: str = None,
+    B_site: str = None,
+    anion: str = "O"
+)
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `bulk` | `BulkStructure` | - | ABO3 bulk structure |
+| `A_site` | `str` | `None` | A-site cation (auto-detected if None) |
+| `B_site` | `str` | `None` | B-site cation (auto-detected if None) |
+| `anion` | `str` | `"O"` | Anion species |
+
+### Methods
+
+#### get_termination_options
+
+```python
+get_termination_options(miller_index: tuple) -> List[str]
+```
+
+Get available termination names (e.g., `["LaO", "VO2"]`).
+
+#### create_surface
+
+```python
+create_surface(
+    miller_index: tuple,
+    termination: str = None,
+    layers: int = 7,
+    vacuum: float = 15.0,
+    symmetric: bool = True,
+    fix_bottom: int = 2,
+    supercell: tuple = None
+) -> SlabStructure
+```
+
+Create perovskite surface with named termination.
+
+**Example:**
+
+```python
+builder = PerovskiteSurfaceBuilder(bulk, A_site="La", B_site="V")
+slab = builder.create_surface(
+    miller_index=(0, 0, 1),
+    termination="LaO",
+    symmetric=True,
+    supercell=(2, 2)
+)
+```
+
+#### analyze_surface
+
+```python
+analyze_surface(slab: SlabStructure) -> dict
+```
+
+Analyze surface for termination, polarity, and stoichiometry.
+
+---
+
+## RocksaltSurfaceBuilder
+
+Specialized builder for rocksalt MX surfaces (NiO, MgO, etc.).
+
+```python
+from nh3sofc.structure import RocksaltSurfaceBuilder
+```
+
+### Constructor
+
+```python
+RocksaltSurfaceBuilder(
+    bulk: Union[BulkStructure, Atoms],
+    cation: str = None,
+    anion: str = "O"
+)
+```
+
+### Methods
+
+#### create_surface
+
+```python
+create_surface(
+    miller_index: tuple,
+    termination: str = None,
+    layers: int = 6,
+    vacuum: float = 15.0,
+    symmetric: bool = False,
+    fix_bottom: int = 2,
+    supercell: tuple = None
+) -> SlabStructure
+```
+
+Create rocksalt surface. Use `symmetric=True` for polar (111) surfaces.
+
+**Example:**
+
+```python
+from ase.build import bulk
+nio = bulk('NiO', 'rocksalt', a=4.17)
+
+builder = RocksaltSurfaceBuilder(nio, cation="Ni")
+slab_001 = builder.create_surface(miller_index=(0, 0, 1))  # Non-polar
+slab_111 = builder.create_surface(miller_index=(1, 1, 1), symmetric=True)  # Polar
+```
+
+---
+
+## FluoriteSurfaceBuilder
+
+Specialized builder for fluorite MX2 surfaces (CeO2, ZrO2, etc.).
+
+```python
+from nh3sofc.structure import FluoriteSurfaceBuilder
+```
+
+### Constructor
+
+```python
+FluoriteSurfaceBuilder(
+    bulk: Union[BulkStructure, Atoms],
+    cation: str = None,
+    anion: str = "O"
+)
+```
+
+### Methods
+
+#### create_surface
+
+```python
+create_surface(
+    miller_index: tuple,
+    termination: str = None,
+    layers: int = 6,
+    vacuum: float = 15.0,
+    symmetric: bool = False,
+    fix_bottom: int = 2,
+    supercell: tuple = None
+) -> SlabStructure
+```
+
+Create fluorite surface. (111) is most stable and non-polar.
+
+**Example:**
+
+```python
+from ase.build import bulk
+ceo2 = bulk('CeO2', 'fluorite', a=5.41)
+
+builder = FluoriteSurfaceBuilder(ceo2, cation="Ce")
+slab_111 = builder.create_surface(miller_index=(1, 1, 1))  # Most stable
+```
+
 ---
 
 ## DefectBuilder

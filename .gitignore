@@ -93,3 +93,6 @@ vasprun.xml
 scratch/
 tmp/
 *.tmp
+
+# Working directory
+workspace/

@@ -1,7 +1,14 @@
 """Structure building module."""
 
 from .bulk import BulkStructure
-from .surface import SurfaceBuilder, SlabStructure, create_slab_from_cif
+from .surface import (
+    SurfaceBuilder,
+    SlabStructure,
+    create_slab_from_cif,
+    PerovskiteSurfaceBuilder,
+    RocksaltSurfaceBuilder,
+    FluoriteSurfaceBuilder,
+)
 from .adsorbates import AdsorbatePlacer, filter_unique_configs, save_configs
 from .defects import DefectBuilder, OxynitrideStructure, generate_vacancy_series
 from .decomposition import (
@@ -19,10 +26,14 @@ from .exsolution import (
 __all__ = [
     # Bulk
     "BulkStructure",
-    # Surface
+    # Surface - General
     "SurfaceBuilder",
     "SlabStructure",
     "create_slab_from_cif",
+    # Surface - Specialized builders
+    "PerovskiteSurfaceBuilder",
+    "RocksaltSurfaceBuilder",
+    "FluoriteSurfaceBuilder",
     # Adsorbates
     "AdsorbatePlacer",
     "filter_unique_configs",

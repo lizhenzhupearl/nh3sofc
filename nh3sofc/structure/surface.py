@@ -1,7 +1,7 @@
 """Surface generation from bulk structures."""
 
 from pathlib import Path
-from typing import Optional, List, Union, Tuple
+from typing import Optional, List, Union, Tuple, Dict
 import numpy as np
 from ase import Atoms
 from ase.build import surface, add_vacuum
@@ -9,7 +9,12 @@ from ase.constraints import FixAtoms
 from ase.io import write
 
 from ..core.base import BaseStructure, get_bottom_atoms, get_surface_atoms
-from ..core.constants import DEFAULT_SURFACE_PARAMS
+from ..core.constants import (
+    DEFAULT_SURFACE_PARAMS,
+    DEFAULT_FORMAL_CHARGES,
+    PEROVSKITE_SITES,
+    SURFACE_POLARITY,
+)
 from .bulk import BulkStructure
 
 
@@ -145,6 +150,370 @@ class SlabStructure(BaseStructure):
         vacuum = cell_z - slab_height
         return vacuum
 
+    # ========== Layer Analysis Methods ==========
+
+    def identify_layers(
+        self,
+        tolerance: float = 0.5,
+    ) -> List[Dict]:
+        """
+        Identify atomic layers in the slab based on z-positions.
+
+        Parameters
+        ----------
+        tolerance : float
+            Z-distance tolerance for layer clustering (Angstrom)
+
+        Returns
+        -------
+        list of dict
+            List of layer info dicts sorted by z-position (bottom to top):
+            [{
+                "z": z_position,
+                "indices": [atom indices],
+                "symbols": [chemical symbols],
+                "composition": {"La": 2, "O": 2},
+            }, ...]
+        """
+        z_positions = self.atoms.positions[:, 2]
+        symbols = self.atoms.get_chemical_symbols()
+
+        # Cluster atoms by z-position
+        sorted_indices = np.argsort(z_positions)
+        layers = []
+        current_layer_indices = [sorted_indices[0]]
+        current_z = z_positions[sorted_indices[0]]
+
+        for idx in sorted_indices[1:]:
+            z = z_positions[idx]
+            if abs(z - current_z) <= tolerance:
+                current_layer_indices.append(idx)
+            else:
+                # Finish current layer
+                layer_symbols = [symbols[i] for i in current_layer_indices]
+                composition = {}
+                for s in layer_symbols:
+                    composition[s] = composition.get(s, 0) + 1
+
+                layers.append({
+                    "z": np.mean([z_positions[i] for i in current_layer_indices]),
+                    "indices": current_layer_indices,
+                    "symbols": layer_symbols,
+                    "composition": composition,
+                })
+                # Start new layer
+                current_layer_indices = [idx]
+                current_z = z
+
+        # Don't forget the last layer
+        layer_symbols = [symbols[i] for i in current_layer_indices]
+        composition = {}
+        for s in layer_symbols:
+            composition[s] = composition.get(s, 0) + 1
+        layers.append({
+            "z": np.mean([z_positions[i] for i in current_layer_indices]),
+            "indices": current_layer_indices,
+            "symbols": layer_symbols,
+            "composition": composition,
+        })
+
+        return layers
+
+    def get_layer_spacing(self) -> List[float]:
+        """
+        Get interlayer distances.
+
+        Returns
+        -------
+        list of float
+            Distances between consecutive layers (Angstrom)
+        """
+        layers = self.identify_layers()
+        spacings = []
+        for i in range(len(layers) - 1):
+            spacing = layers[i + 1]["z"] - layers[i]["z"]
+            spacings.append(spacing)
+        return spacings
+
+    def get_top_layer(self, tolerance: float = 0.5) -> Dict:
+        """Get the topmost layer."""
+        layers = self.identify_layers(tolerance)
+        return layers[-1] if layers else {}
+
+    def get_bottom_layer(self, tolerance: float = 0.5) -> Dict:
+        """Get the bottommost layer."""
+        layers = self.identify_layers(tolerance)
+        return layers[0] if layers else {}
+
+    # ========== Polarity Analysis Methods ==========
+
+    def calculate_layer_charges(
+        self,
+        formal_charges: Optional[Dict[str, float]] = None,
+        tolerance: float = 0.5,
+    ) -> List[Dict]:
+        """
+        Calculate formal charges per atomic layer.
+
+        Parameters
+        ----------
+        formal_charges : dict, optional
+            Formal charges by element (e.g., {"La": +3, "V": +5, "O": -2}).
+            If None, uses DEFAULT_FORMAL_CHARGES.
+        tolerance : float
+            Z-distance tolerance for layer detection (Angstrom)
+
+        Returns
+        -------
+        list of dict
+            List of layer info with charges:
+            [{
+                "z": z_position,
+                "indices": [atom indices],
+                "composition": {"La": 2, "O": 2},
+                "charge": total_charge,
+                "charge_per_area": charge/area,
+            }, ...]
+        """
+        if formal_charges is None:
+            formal_charges = DEFAULT_FORMAL_CHARGES
+
+        layers = self.identify_layers(tolerance)
+        area = self.get_surface_area()
+
+        for layer in layers:
+            total_charge = 0.0
+            for symbol, count in layer["composition"].items():
+                charge = formal_charges.get(symbol, 0.0)
+                total_charge += charge * count
+            layer["charge"] = total_charge
+            layer["charge_per_area"] = total_charge / area if area > 0 else 0.0
+
+        return layers
+
+    def calculate_dipole_moment(
+        self,
+        formal_charges: Optional[Dict[str, float]] = None,
+    ) -> Tuple[float, np.ndarray]:
+        """
+        Calculate electric dipole moment of the slab.
+
+        The dipole moment is calculated as sum of q_i * r_i for all atoms.
+
+        Parameters
+        ----------
+        formal_charges : dict, optional
+            Formal charges by element. If None, uses DEFAULT_FORMAL_CHARGES.
+
+        Returns
+        -------
+        tuple
+            (magnitude in e·Å, direction vector [normalized])
+        """
+        if formal_charges is None:
+            formal_charges = DEFAULT_FORMAL_CHARGES
+
+        symbols = self.atoms.get_chemical_symbols()
+        positions = self.atoms.get_positions()
+
+        # Calculate center of mass for reference
+        masses = self.atoms.get_masses()
+        com = np.sum(positions * masses[:, np.newaxis], axis=0) / np.sum(masses)
+
+        # Calculate dipole moment relative to center of mass
+        dipole = np.zeros(3)
+        for i, (symbol, pos) in enumerate(zip(symbols, positions)):
+            charge = formal_charges.get(symbol, 0.0)
+            dipole += charge * (pos - com)
+
+        magnitude = np.linalg.norm(dipole)
+        direction = dipole / magnitude if magnitude > 1e-10 else np.array([0, 0, 1])
+
+        return magnitude, direction
+
+    def check_polarity(
+        self,
+        formal_charges: Optional[Dict[str, float]] = None,
+        tolerance: float = 0.5,
+    ) -> Dict:
+        """
+        Check if surface is polar (has net dipole in z-direction).
+
+        Parameters
+        ----------
+        formal_charges : dict, optional
+            Formal charges by element.
+        tolerance : float
+            Layer detection tolerance.
+
+        Returns
+        -------
+        dict
+            {
+                "is_polar": bool,
+                "dipole_moment": float (e·Å),
+                "dipole_z": float (z-component),
+                "top_layer_charge": float,
+                "bottom_layer_charge": float,
+                "layer_charges": list,
+                "recommendation": str,
+            }
+        """
+        layers = self.calculate_layer_charges(formal_charges, tolerance)
+        magnitude, direction = self.calculate_dipole_moment(formal_charges)
+        dipole_z = magnitude * direction[2]
+
+        top_charge = layers[-1]["charge"] if layers else 0.0
+        bottom_charge = layers[0]["charge"] if layers else 0.0
+
+        # Check if alternating charged layers (typical for polar surfaces)
+        charges = [layer["charge"] for layer in layers]
+        has_alternating = False
+        if len(charges) > 1:
+            signs = [np.sign(c) for c in charges if abs(c) > 0.1]
+            if len(signs) > 1:
+                has_alternating = all(signs[i] != signs[i+1] for i in range(len(signs)-1))
+
+        # Determine if polar (significant z-dipole or alternating charges)
+        is_polar = abs(dipole_z) > 0.5 or has_alternating
+
+        # Generate recommendation
+        if is_polar:
+            if abs(top_charge + bottom_charge) < 0.1:
+                recommendation = "Surface has symmetric terminations - dipole may cancel."
+            else:
+                recommendation = (
+                    "Polar surface detected. Consider: "
+                    "(1) Use symmetric slab with same termination on both sides, "
+                    "(2) Apply dipole correction (IDIPOL=3, LDIPOL=.TRUE.), or "
+                    "(3) Add compensating charges/vacancies."
+                )
+        else:
+            recommendation = "Non-polar surface - no special treatment needed."
+
+        return {
+            "is_polar": is_polar,
+            "dipole_moment": magnitude,
+            "dipole_z": dipole_z,
+            "top_layer_charge": top_charge,
+            "bottom_layer_charge": bottom_charge,
+            "layer_charges": charges,
+            "has_alternating_charges": has_alternating,
+            "recommendation": recommendation,
+        }
+
+    # ========== Stoichiometry Methods ==========
+
+    def get_stoichiometry(self) -> Dict[str, float]:
+        """
+        Get normalized stoichiometry.
+
+        Returns
+        -------
+        dict
+            Element ratios normalized to smallest count
+            (e.g., {"La": 1.0, "V": 1.0, "O": 3.0})
+        """
+        counts = self.get_element_count()
+        if not counts:
+            return {}
+
+        min_count = min(counts.values())
+        return {elem: count / min_count for elem, count in counts.items()}
+
+    def check_stoichiometry(
+        self,
+        expected: Optional[Dict[str, float]] = None,
+        tolerance: float = 0.1,
+    ) -> Dict:
+        """
+        Check if stoichiometry is reasonable.
+
+        Parameters
+        ----------
+        expected : dict, optional
+            Expected stoichiometry (e.g., {"La": 1, "V": 1, "O": 3})
+        tolerance : float
+            Allowed deviation from expected ratios
+
+        Returns
+        -------
+        dict
+            {
+                "is_stoichiometric": bool,
+                "actual": dict,
+                "expected": dict or None,
+                "deviation": dict,
+                "warnings": list,
+            }
+        """
+        actual = self.get_stoichiometry()
+        warnings = []
+
+        if expected is None:
+            # Can't check against expected
+            return {
+                "is_stoichiometric": True,  # Assume OK
+                "actual": actual,
+                "expected": None,
+                "deviation": {},
+                "warnings": ["No expected stoichiometry provided for comparison."],
+            }
+
+        # Calculate deviations
+        deviation = {}
+        is_stoichiometric = True
+
+        for elem in set(list(actual.keys()) + list(expected.keys())):
+            act = actual.get(elem, 0.0)
+            exp = expected.get(elem, 0.0)
+            if exp > 0:
+                dev = abs(act - exp) / exp
+            else:
+                dev = float('inf') if act > 0 else 0.0
+            deviation[elem] = dev
+
+            if dev > tolerance:
+                is_stoichiometric = False
+                warnings.append(
+                    f"{elem}: expected {exp:.2f}, got {act:.2f} (deviation: {dev*100:.1f}%)"
+                )
+
+        return {
+            "is_stoichiometric": is_stoichiometric,
+            "actual": actual,
+            "expected": expected,
+            "deviation": deviation,
+            "warnings": warnings,
+        }
+
+    def get_layer_stoichiometry(self, tolerance: float = 0.5) -> List[Dict]:
+        """
+        Get stoichiometry per layer.
+
+        Returns
+        -------
+        list of dict
+            [{
+                "z": z_position,
+                "composition": {"La": 2, "O": 2},
+                "stoichiometry": {"La": 1.0, "O": 1.0},
+            }, ...]
+        """
+        layers = self.identify_layers(tolerance)
+
+        for layer in layers:
+            comp = layer["composition"]
+            if comp:
+                min_count = min(comp.values())
+                layer["stoichiometry"] = {
+                    elem: count / min_count for elem, count in comp.items()
+                }
+            else:
+                layer["stoichiometry"] = {}
+
+        return layers
+
     def add_vacuum(self, vacuum: float) -> "SlabStructure":
         """
         Add vacuum to the slab.
@@ -205,8 +574,9 @@ class SlabStructure(BaseStructure):
         Returns
         -------
         SlabStructure
-            Repeated slab
+            Repeated slab (with constraints reapplied if present)
         """
+        n_atoms_original = len(self.atoms)
         new_atoms = self.atoms.repeat((nx, ny, 1))
         new_slab = SlabStructure(
             new_atoms,
@@ -214,6 +584,16 @@ class SlabStructure(BaseStructure):
             termination=self.termination,
             n_layers=self.n_layers
         )
+
+        # Reapply constraints if there were fixed atoms
+        if self._fixed_indices:
+            # Map old fixed indices to new indices in repeated structure
+            new_fixed = []
+            for rep in range(nx * ny):
+                for old_idx in self._fixed_indices:
+                    new_fixed.append(rep * n_atoms_original + old_idx)
+            new_slab.fix_atoms(new_fixed)
+
         return new_slab
 
     def copy(self) -> "SlabStructure":
@@ -462,6 +842,536 @@ class SurfaceBuilder:
             "dominant_element": dominant[0],
             "dominant_count": dominant[1],
         }
+
+    def create_symmetric_slab(
+        self,
+        miller_index: Tuple[int, int, int],
+        layers: int = 7,
+        vacuum: float = 15.0,
+        fix_bottom: int = 2,
+    ) -> SlabStructure:
+        """
+        Create a symmetric slab with same termination on top and bottom.
+
+        For polar surfaces, this helps cancel the dipole moment.
+
+        Parameters
+        ----------
+        miller_index : tuple
+            Miller indices (h, k, l)
+        layers : int
+            Number of layers (should be odd for most symmetric slabs)
+        vacuum : float
+            Vacuum thickness in Angstrom
+        fix_bottom : int
+            Number of bottom layers to fix
+
+        Returns
+        -------
+        SlabStructure
+            Symmetric slab
+
+        Notes
+        -----
+        For perovskites (ABO3) along (001):
+        - Odd layers give AO-BO2-AO-BO2-AO (same termination top/bottom)
+        - Even layers give AO-BO2-AO-BO2 (different terminations)
+        """
+        # Ensure odd number of layers for symmetric terminations
+        if layers % 2 == 0:
+            layers += 1
+
+        # Use base SurfaceBuilder.create_surface to avoid recursion in subclasses
+        slab = SurfaceBuilder.create_surface(
+            self,
+            miller_index=miller_index,
+            layers=layers,
+            vacuum=vacuum,
+            fix_bottom=fix_bottom,
+        )
+
+        # Verify symmetry
+        polarity = slab.check_polarity()
+        if polarity["is_polar"] and abs(polarity["dipole_z"]) > 1.0:
+            # Try adding one more layer
+            slab2 = SurfaceBuilder.create_surface(
+                self,
+                miller_index=miller_index,
+                layers=layers + 1,
+                vacuum=vacuum,
+                fix_bottom=fix_bottom,
+            )
+            polarity2 = slab2.check_polarity()
+            if abs(polarity2["dipole_z"]) < abs(polarity["dipole_z"]):
+                slab = slab2
+
+        slab.termination = "symmetric"
+        return slab
+
+
+class PerovskiteSurfaceBuilder(SurfaceBuilder):
+    """
+    Specialized surface builder for ABO3 perovskite structures.
+
+    Handles named terminations (AO, BO2), automatic polarity compensation,
+    and stoichiometry validation.
+
+    Examples
+    --------
+    >>> bulk = BulkStructure.from_cif("LaVO3.cif")
+    >>> builder = PerovskiteSurfaceBuilder(bulk, A_site="La", B_site="V")
+    >>> slab = builder.create_surface(
+    ...     miller_index=(0, 0, 1),
+    ...     termination="LaO",
+    ...     layers=7,
+    ...     symmetric=True
+    ... )
+    """
+
+    def __init__(
+        self,
+        bulk: Union[BulkStructure, Atoms],
+        A_site: Optional[str] = None,
+        B_site: Optional[str] = None,
+        anion: str = "O",
+    ):
+        """
+        Initialize PerovskiteSurfaceBuilder.
+
+        Parameters
+        ----------
+        bulk : BulkStructure or Atoms
+            ABO3 perovskite bulk structure
+        A_site : str, optional
+            A-site cation (e.g., "La", "Sr"). Auto-detected if None.
+        B_site : str, optional
+            B-site cation (e.g., "V", "Ti"). Auto-detected if None.
+        anion : str
+            Anion species (default "O")
+        """
+        super().__init__(bulk)
+        self.anion = anion
+
+        # Auto-detect A and B sites if not provided
+        symbols = list(set(self.bulk.get_chemical_symbols()))
+        symbols = [s for s in symbols if s != anion]
+
+        if A_site is None or B_site is None:
+            detected = self._detect_sites(symbols)
+            A_site = A_site or detected.get("A_site")
+            B_site = B_site or detected.get("B_site")
+
+        self.A_site = A_site
+        self.B_site = B_site
+
+    def _detect_sites(self, symbols: List[str]) -> Dict[str, str]:
+        """Auto-detect A and B site cations."""
+        A_candidates = [s for s in symbols if s in PEROVSKITE_SITES["A_site"]]
+        B_candidates = [s for s in symbols if s in PEROVSKITE_SITES["B_site"]]
+
+        result = {}
+        if A_candidates:
+            result["A_site"] = A_candidates[0]
+        if B_candidates:
+            result["B_site"] = B_candidates[0]
+
+        return result
+
+    def get_termination_options(
+        self,
+        miller_index: Tuple[int, int, int] = (0, 0, 1),
+    ) -> List[str]:
+        """
+        Get available termination names for given Miller index.
+
+        Parameters
+        ----------
+        miller_index : tuple
+            Miller indices
+
+        Returns
+        -------
+        list of str
+            Available termination names (e.g., ["LaO", "VO2"])
+        """
+        if miller_index == (0, 0, 1):
+            return [
+                f"{self.A_site}{self.anion}",  # e.g., "LaO"
+                f"{self.B_site}{self.anion}2",  # e.g., "VO2"
+            ]
+        elif miller_index == (1, 1, 0):
+            return [
+                f"{self.A_site}{self.B_site}{self.anion}",
+                f"{self.anion}2",
+            ]
+        else:
+            return ["term_0", "term_1"]
+
+    def create_surface(
+        self,
+        miller_index: Tuple[int, int, int],
+        termination: Optional[str] = None,
+        layers: int = 7,
+        vacuum: float = 15.0,
+        symmetric: bool = True,
+        fix_bottom: int = 2,
+        supercell: Optional[Tuple[int, int]] = None,
+    ) -> SlabStructure:
+        """
+        Create perovskite surface with specified termination.
+
+        Parameters
+        ----------
+        miller_index : tuple
+            Miller indices (h, k, l)
+        termination : str, optional
+            Desired termination (e.g., "LaO", "VO2", "AO", "BO2")
+            If None, uses first available termination.
+        layers : int
+            Number of layers
+        vacuum : float
+            Vacuum thickness in Angstrom
+        symmetric : bool
+            If True, create symmetric slab (same termination on both sides)
+        fix_bottom : int
+            Number of bottom layers to fix
+        supercell : tuple, optional
+            Supercell size (nx, ny)
+
+        Returns
+        -------
+        SlabStructure
+            Perovskite surface slab
+        """
+        # Normalize termination name
+        if termination:
+            termination = termination.replace("AO", f"{self.A_site}{self.anion}")
+            termination = termination.replace("BO2", f"{self.B_site}{self.anion}2")
+
+        # Get all terminations and find the matching one
+        all_terms = self.get_all_terminations(miller_index, layers, vacuum)
+
+        best_slab = None
+        best_match = 0
+
+        for slab in all_terms:
+            term_info = self.identify_termination(slab)
+            comp = term_info["composition"]
+
+            # Check if this termination matches the requested one
+            if termination:
+                if termination == f"{self.A_site}{self.anion}":
+                    # Looking for AO termination
+                    if self.A_site in comp and self.anion in comp:
+                        match = comp.get(self.A_site, 0) + comp.get(self.anion, 0)
+                        if match > best_match:
+                            best_match = match
+                            best_slab = slab
+                elif termination == f"{self.B_site}{self.anion}2":
+                    # Looking for BO2 termination
+                    if self.B_site in comp:
+                        match = comp.get(self.B_site, 0)
+                        if match > best_match:
+                            best_match = match
+                            best_slab = slab
+            else:
+                # No specific termination requested, use first
+                best_slab = slab
+                break
+
+        if best_slab is None:
+            # Fall back to basic surface creation
+            best_slab = super().create_surface(
+                miller_index, layers, vacuum, fix_bottom=fix_bottom
+            )
+
+        best_slab.termination = termination
+
+        # Create symmetric slab if requested
+        if symmetric:
+            # Ensure odd number of layers
+            if layers % 2 == 0:
+                layers += 1
+            best_slab = super().create_symmetric_slab(
+                miller_index, layers, vacuum, fix_bottom
+            )
+            best_slab.termination = f"{termination}_symmetric" if termination else "symmetric"
+
+        # Apply supercell
+        if supercell:
+            best_slab = best_slab.repeat_xy(supercell[0], supercell[1])
+
+        # Fix bottom layers
+        if fix_bottom > 0 and not best_slab.fixed_indices:
+            best_slab.fix_bottom_layers(fix_bottom)
+
+        return best_slab
+
+    def analyze_surface(self, slab: SlabStructure) -> Dict:
+        """
+        Analyze perovskite surface for termination, polarity, and stoichiometry.
+
+        Parameters
+        ----------
+        slab : SlabStructure
+            Perovskite slab to analyze
+
+        Returns
+        -------
+        dict
+            Comprehensive analysis including termination, polarity,
+            stoichiometry, and recommendations
+        """
+        term_info = self.identify_termination(slab)
+        polarity = slab.check_polarity()
+        stoich = slab.check_stoichiometry(
+            expected={self.A_site: 1, self.B_site: 1, self.anion: 3}
+        )
+
+        # Determine termination type
+        comp = term_info["composition"]
+        if self.A_site in comp and self.anion in comp and self.B_site not in comp:
+            term_type = f"{self.A_site}{self.anion}"
+        elif self.B_site in comp:
+            term_type = f"{self.B_site}{self.anion}2"
+        else:
+            term_type = "mixed"
+
+        return {
+            "termination_type": term_type,
+            "surface_composition": comp,
+            "polarity": polarity,
+            "stoichiometry": stoich,
+            "A_site": self.A_site,
+            "B_site": self.B_site,
+            "anion": self.anion,
+        }
+
+
+class RocksaltSurfaceBuilder(SurfaceBuilder):
+    """
+    Specialized surface builder for rocksalt (MX) structures like NiO, MgO.
+
+    Examples
+    --------
+    >>> bulk = BulkStructure.from_cif("NiO.cif")
+    >>> builder = RocksaltSurfaceBuilder(bulk, cation="Ni", anion="O")
+    >>> slab = builder.create_surface(
+    ...     miller_index=(0, 0, 1),
+    ...     layers=6
+    ... )
+    """
+
+    def __init__(
+        self,
+        bulk: Union[BulkStructure, Atoms],
+        cation: Optional[str] = None,
+        anion: str = "O",
+    ):
+        """
+        Initialize RocksaltSurfaceBuilder.
+
+        Parameters
+        ----------
+        bulk : BulkStructure or Atoms
+            Rocksalt bulk structure
+        cation : str, optional
+            Cation species (e.g., "Ni", "Mg"). Auto-detected if None.
+        anion : str
+            Anion species (default "O")
+        """
+        super().__init__(bulk)
+        self.anion = anion
+
+        if cation is None:
+            symbols = list(set(self.bulk.get_chemical_symbols()))
+            cation = [s for s in symbols if s != anion][0] if len(symbols) > 1 else None
+
+        self.cation = cation
+
+    def get_termination_options(
+        self,
+        miller_index: Tuple[int, int, int] = (0, 0, 1),
+    ) -> List[str]:
+        """Get available termination names."""
+        if miller_index == (0, 0, 1) or miller_index == (1, 1, 0):
+            return [f"{self.cation}{self.anion}"]  # Non-polar, mixed
+        elif miller_index == (1, 1, 1):
+            return [self.cation, self.anion]  # Polar
+        else:
+            return ["term_0"]
+
+    def create_surface(
+        self,
+        miller_index: Tuple[int, int, int],
+        termination: Optional[str] = None,
+        layers: int = 6,
+        vacuum: float = 15.0,
+        symmetric: bool = False,
+        fix_bottom: int = 2,
+        supercell: Optional[Tuple[int, int]] = None,
+    ) -> SlabStructure:
+        """
+        Create rocksalt surface.
+
+        Parameters
+        ----------
+        miller_index : tuple
+            Miller indices. (001) and (110) are non-polar, (111) is polar.
+        termination : str, optional
+            For (111): cation name (e.g., "Ni") or "O"
+        layers : int
+            Number of layers
+        vacuum : float
+            Vacuum thickness
+        symmetric : bool
+            Create symmetric slab (important for polar (111))
+        fix_bottom : int
+            Number of bottom layers to fix
+        supercell : tuple, optional
+            Supercell size (nx, ny)
+
+        Returns
+        -------
+        SlabStructure
+            Rocksalt surface slab
+        """
+        # Check if surface is polar
+        is_polar = miller_index == (1, 1, 1)
+
+        if is_polar and symmetric:
+            slab = super().create_symmetric_slab(
+                miller_index, layers, vacuum, fix_bottom
+            )
+        else:
+            slab = super().create_surface(
+                miller_index, layers, vacuum, fix_bottom=fix_bottom
+            )
+
+        slab.termination = termination or f"{self.cation}{self.anion}"
+
+        if supercell:
+            slab = slab.repeat_xy(supercell[0], supercell[1])
+
+        # Warn about polar surfaces
+        if is_polar and not symmetric:
+            polarity = slab.check_polarity()
+            if polarity["is_polar"]:
+                print(f"Warning: {miller_index} surface is polar. "
+                      f"Consider using symmetric=True or applying dipole correction.")
+
+        return slab
+
+
+class FluoriteSurfaceBuilder(SurfaceBuilder):
+    """
+    Specialized surface builder for fluorite (MX2) structures like CeO2, ZrO2.
+
+    Examples
+    --------
+    >>> bulk = BulkStructure.from_cif("CeO2.cif")
+    >>> builder = FluoriteSurfaceBuilder(bulk, cation="Ce", anion="O")
+    >>> slab = builder.create_surface(
+    ...     miller_index=(1, 1, 1),  # Most stable
+    ...     layers=6
+    ... )
+    """
+
+    def __init__(
+        self,
+        bulk: Union[BulkStructure, Atoms],
+        cation: Optional[str] = None,
+        anion: str = "O",
+    ):
+        """
+        Initialize FluoriteSurfaceBuilder.
+
+        Parameters
+        ----------
+        bulk : BulkStructure or Atoms
+            Fluorite bulk structure
+        cation : str, optional
+            Cation species (e.g., "Ce", "Zr"). Auto-detected if None.
+        anion : str
+            Anion species (default "O")
+        """
+        super().__init__(bulk)
+        self.anion = anion
+
+        if cation is None:
+            symbols = list(set(self.bulk.get_chemical_symbols()))
+            cation = [s for s in symbols if s != anion][0] if len(symbols) > 1 else None
+
+        self.cation = cation
+
+    def get_termination_options(
+        self,
+        miller_index: Tuple[int, int, int] = (1, 1, 1),
+    ) -> List[str]:
+        """Get available termination names."""
+        if miller_index == (1, 1, 1):
+            return [f"{self.anion}"]  # O-terminated most stable
+        elif miller_index == (1, 1, 0):
+            return [f"{self.cation}{self.anion}", self.anion]
+        elif miller_index == (0, 0, 1):
+            return [self.cation, f"{self.anion}2"]
+        else:
+            return ["term_0"]
+
+    def create_surface(
+        self,
+        miller_index: Tuple[int, int, int],
+        termination: Optional[str] = None,
+        layers: int = 6,
+        vacuum: float = 15.0,
+        symmetric: bool = False,
+        fix_bottom: int = 2,
+        supercell: Optional[Tuple[int, int]] = None,
+    ) -> SlabStructure:
+        """
+        Create fluorite surface.
+
+        Parameters
+        ----------
+        miller_index : tuple
+            Miller indices. (111) is most stable and non-polar.
+            (110) and (100) are polar.
+        termination : str, optional
+            Desired termination
+        layers : int
+            Number of layers
+        vacuum : float
+            Vacuum thickness
+        symmetric : bool
+            Create symmetric slab
+        fix_bottom : int
+            Number of bottom layers to fix
+        supercell : tuple, optional
+            Supercell size (nx, ny)
+
+        Returns
+        -------
+        SlabStructure
+            Fluorite surface slab
+        """
+        # (111) is non-polar for fluorite, others are polar
+        is_polar = miller_index != (1, 1, 1)
+
+        if is_polar and symmetric:
+            slab = super().create_symmetric_slab(
+                miller_index, layers, vacuum, fix_bottom
+            )
+        else:
+            slab = super().create_surface(
+                miller_index, layers, vacuum, fix_bottom=fix_bottom
+            )
+
+        slab.termination = termination or self.anion
+
+        if supercell:
+            slab = slab.repeat_xy(supercell[0], supercell[1])
+
+        return slab
 
 
 def create_slab_from_cif(

@@ -176,8 +176,63 @@ EXSOLUTION_METALS = {
 
 # Perovskite ABO3 site classification
 PEROVSKITE_SITES = {
-    "A_site": ["La", "Sr", "Ba", "Ca", "K", "Na"],
-    "B_site": ["Ti", "V", "Mn", "Fe", "Co", "Ni", "Cu", "Zr", "Nb"],
+    "A_site": ["La", "Sr", "Ba", "Ca", "K", "Na", "Pr", "Nd", "Sm", "Gd"],
+    "B_site": ["Ti", "V", "Mn", "Fe", "Co", "Ni", "Cu", "Zr", "Nb", "Cr", "Mo", "W"],
+}
+
+# Formal oxidation states for polarity calculations
+# Used for estimating layer charges and dipole moments
+DEFAULT_FORMAL_CHARGES = {
+    # A-site cations (perovskites, typically +2 or +3)
+    "La": +3, "Sr": +2, "Ba": +2, "Ca": +2, "K": +1, "Na": +1,
+    "Pr": +3, "Nd": +3, "Sm": +3, "Gd": +3, "Y": +3,
+    # B-site cations (perovskites, variable oxidation state)
+    "Ti": +4, "V": +5, "Mn": +4, "Fe": +3, "Co": +3, "Ni": +2,
+    "Cu": +2, "Zr": +4, "Nb": +5, "Cr": +3, "Mo": +6, "W": +6,
+    # Reducible cations
+    "Ce": +4,  # Can be +3 near vacancies
+    # Anions
+    "O": -2, "N": -3, "F": -1, "S": -2, "Cl": -1,
+    # Adsorbate atoms (approximate)
+    "H": +1, "C": 0,
+}
+
+# Structure type definitions for automatic detection
+STRUCTURE_TYPES = {
+    "perovskite": {
+        "formula_pattern": "ABO3",  # General pattern
+        "coordination": {"A": 12, "B": 6, "O": 2},  # Typical coordination numbers
+        "examples": ["LaVO3", "SrTiO3", "BaTiO3", "LaMnO3"],
+    },
+    "rocksalt": {
+        "formula_pattern": "MX",
+        "coordination": {"M": 6, "X": 6},
+        "examples": ["NiO", "MgO", "CoO", "FeO"],
+    },
+    "fluorite": {
+        "formula_pattern": "MX2",
+        "coordination": {"M": 8, "X": 4},
+        "examples": ["CeO2", "ZrO2", "UO2"],
+    },
+}
+
+# Surface polarity information for common facets
+SURFACE_POLARITY = {
+    "perovskite": {
+        (0, 0, 1): {"polar": True, "layers": ["AO", "BO2"], "charges": [+1, -1]},
+        (1, 1, 0): {"polar": True, "layers": ["ABO", "O2"], "charges": [+3, -4]},
+        (1, 1, 1): {"polar": True, "layers": ["AO3", "B"], "charges": [-3, +5]},
+    },
+    "rocksalt": {
+        (0, 0, 1): {"polar": False, "layers": ["MO"], "charges": [0]},
+        (1, 1, 0): {"polar": False, "layers": ["MO"], "charges": [0]},
+        (1, 1, 1): {"polar": True, "layers": ["M", "O"], "charges": [+2, -2]},
+    },
+    "fluorite": {
+        (1, 1, 1): {"polar": False, "layers": ["O-M-O"], "charges": [0]},
+        (1, 1, 0): {"polar": True, "layers": ["MO", "O"], "charges": [+2, -2]},
+        (0, 0, 1): {"polar": True, "layers": ["M", "O2"], "charges": [+4, -4]},
+    },
 }
 
 # Magic cluster sizes for stable nanoparticles

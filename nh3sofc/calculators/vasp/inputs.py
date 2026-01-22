@@ -125,6 +125,25 @@ class VASPInputGenerator:
         # Apply user overrides
         self.incar_params.update(kwargs)
 
+    def sort_atoms_by_element(self) -> None:
+        """
+        Sort atoms by chemical symbol (alphabetically).
+
+        This ensures proper POSCAR format where atoms are grouped by element
+        (e.g., "La La La V V V O O O") instead of scattered ordering
+        (e.g., "La V O La V O") which some visualization tools can't read.
+
+        Also ensures consistency between POSCAR, POTCAR, and INCAR.
+        """
+        symbols = self.atoms.get_chemical_symbols()
+        unique_symbols = sorted(set(symbols))
+        sort_indices = []
+        for sym in unique_symbols:
+            for i, s in enumerate(symbols):
+                if s == sym:
+                    sort_indices.append(i)
+        self.atoms = self.atoms[sort_indices]
+
     def set_encut(self, encut: float) -> None:
         """Set plane-wave cutoff energy."""
         self.incar_params["ENCUT"] = encut
@@ -337,6 +356,9 @@ class VASPInputGenerator:
         """
         Generate POSCAR file content.
 
+        Note: If using generate_all() with sort_atoms=True (default), atoms
+        are already sorted by element type before this method is called.
+
         Returns
         -------
         str
@@ -424,6 +446,7 @@ class VASPInputGenerator:
         is_surface: bool = False,
         potcar_dir: Optional[str] = None,
         potcar_map: Optional[Dict[str, str]] = None,
+        sort_atoms: bool = True,
     ) -> Dict[str, Path]:
         """
         Generate all VASP input files.
@@ -446,12 +469,19 @@ class VASPInputGenerator:
             POTCAR directory
         potcar_map : dict, optional
             Element to POTCAR variant mapping
+        sort_atoms : bool
+            If True (default), sort atoms by element type before writing files.
+            This ensures proper POSCAR format and consistency across all files.
 
         Returns
         -------
         dict
             Dictionary mapping file names to paths
         """
+        # Sort atoms by element for proper POSCAR format and consistency
+        if sort_atoms:
+            self.sort_atoms_by_element()
+
         # Apply settings
         if encut is not None:
             self.set_encut(encut)
@@ -507,6 +537,7 @@ def create_vasp_inputs(
     hubbard_u: Optional[Dict[str, float]] = None,
     vdw: Optional[str] = None,
     is_surface: bool = True,
+    sort_atoms: bool = True,
 ) -> Dict[str, Path]:
     """
     Convenience function to create VASP inputs.
@@ -529,6 +560,8 @@ def create_vasp_inputs(
         VdW method
     is_surface : bool
         Surface calculation
+    sort_atoms : bool
+        If True (default), sort atoms by element type for proper POSCAR format
 
     Returns
     -------
@@ -542,4 +575,5 @@ def create_vasp_inputs(
         hubbard_u=hubbard_u,
         vdw=vdw,
         is_surface=is_surface,
+        sort_atoms=sort_atoms,
     )
