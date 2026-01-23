@@ -155,7 +155,7 @@ class DefectBuilder:
     def _get_surface_indices(
         self,
         indices: List[int],
-        surface_fraction: float = 0.3,
+        z_threshold: float = 0.3,
     ) -> Tuple[List[int], List[int]]:
         """
         Split indices into surface and bulk based on z-position.
@@ -164,8 +164,8 @@ class DefectBuilder:
         ----------
         indices : list
             Atom indices to split
-        surface_fraction : float
-            Fraction of slab height considered as surface region
+        z_threshold : float
+            Fraction of slab height considered as surface region (0.3 = top 30%)
 
         Returns
         -------
@@ -174,7 +174,7 @@ class DefectBuilder:
         """
         z_positions = self.atoms.positions[:, 2]
         z_min, z_max = z_positions.min(), z_positions.max()
-        z_cutoff = z_max - surface_fraction * (z_max - z_min)
+        z_cutoff = z_max - z_threshold * (z_max - z_min)
 
         surface_indices = [i for i in indices if z_positions[i] >= z_cutoff]
         bulk_indices = [i for i in indices if z_positions[i] < z_cutoff]
@@ -187,7 +187,7 @@ class DefectBuilder:
         placement: str = "random",
         preference: float = 0.7,
         n_positions: Optional[np.ndarray] = None,
-        surface_fraction: float = 0.3,
+        z_threshold: float = 0.3,
     ) -> np.ndarray:
         """
         Calculate selection weights for each candidate based on placement strategy.
@@ -204,8 +204,8 @@ class DefectBuilder:
             For "near_N": how strongly vacancies prefer to be near N
         n_positions : ndarray, optional
             Positions of N atoms (required for "near_N" placement)
-        surface_fraction : float
-            Fraction of slab height considered as surface region
+        z_threshold : float
+            Fraction of slab height considered as surface region (0.3 = top 30%)
 
         Returns
         -------
@@ -855,7 +855,7 @@ def generate_vacancy_series(
 def analyze_defect_distribution(
     atoms: Atoms,
     reference_atoms: Optional[Atoms] = None,
-    surface_fraction: float = 0.3,
+    z_threshold: float = 0.3,
     near_n_cutoff: float = 3.0,
 ) -> Dict[str, Any]:
     """
@@ -867,7 +867,7 @@ def analyze_defect_distribution(
         Structure to analyze (oxynitride with possible vacancies)
     reference_atoms : Atoms, optional
         Original structure before vacancy creation (to count vacancies)
-    surface_fraction : float
+    z_threshold : float
         Fraction of slab height considered as surface region (default: 0.3 = top 30%)
     near_n_cutoff : float
         Distance cutoff for "near N" analysis in Angstroms (default: 3.0)
@@ -898,9 +898,9 @@ def analyze_defect_distribution(
     positions = atoms.get_positions()
     z_positions = positions[:, 2]
 
-    # Define surface region (top surface_fraction of slab)
+    # Define surface region (top z_threshold fraction of slab)
     z_min, z_max = z_positions.min(), z_positions.max()
-    z_cutoff = z_max - surface_fraction * (z_max - z_min)
+    z_cutoff = z_max - z_threshold * (z_max - z_min)
 
     # Get indices by element
     n_indices = [i for i, s in enumerate(symbols) if s == "N"]
@@ -929,7 +929,7 @@ def analyze_defect_distribution(
         "o_bulk": len(o_bulk),
         "surface_n_ratio": surface_n_ratio,
         "bulk_n_ratio": bulk_n_ratio,
-        "surface_fraction_used": surface_fraction,
+        "z_threshold": z_threshold,
         "z_cutoff": z_cutoff,
     }
 
@@ -1004,7 +1004,7 @@ def analyze_defect_distribution(
 def analyze_oxynitride_pool(
     pool: List[Dict[str, Any]],
     reference_atoms: Optional[Atoms] = None,
-    surface_fraction: float = 0.3,
+    z_threshold: float = 0.3,
     near_n_cutoff: float = 3.0,
 ) -> Dict[str, Any]:
     """
@@ -1016,8 +1016,8 @@ def analyze_oxynitride_pool(
         Pool from create_oxynitride_pool(), each with "atoms" and "placement" keys
     reference_atoms : Atoms, optional
         Original structure before defects (for vacancy counting)
-    surface_fraction : float
-        Fraction of slab considered as surface (default: 0.3)
+    z_threshold : float
+        Fraction of slab considered as surface (default: 0.3 = top 30%)
     near_n_cutoff : float
         Distance cutoff for "near N" analysis (default: 3.0 Å)
 
@@ -1048,7 +1048,7 @@ def analyze_oxynitride_pool(
         analysis = analyze_defect_distribution(
             atoms,
             reference_atoms=reference_atoms,
-            surface_fraction=surface_fraction,
+            z_threshold=z_threshold,
             near_n_cutoff=near_n_cutoff,
         )
 
@@ -1133,7 +1133,7 @@ def print_defect_analysis(
     if "n_total" in stats:
         print(f"\nNitrogen Distribution:")
         print(f"  Total N atoms: {stats['n_total']}")
-        print(f"  N in surface (top {stats['surface_fraction_used']*100:.0f}%): {stats['n_surface']} ({stats['n_surface_fraction']*100:.1f}%)")
+        print(f"  N in surface (top {stats['z_threshold']*100:.0f}%): {stats['n_surface']} ({stats['n_surface_fraction']*100:.1f}%)")
         print(f"  N in bulk: {stats['n_bulk']}")
         print(f"\nAnion Composition by Region:")
         print(f"  Surface N/(N+O) ratio: {stats['surface_n_ratio']*100:.1f}%")

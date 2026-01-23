@@ -356,7 +356,7 @@ from nh3sofc.structure import (
 # Analyze a single configuration
 stats = analyze_defect_distribution(
     oxynitride_surface,
-    surface_fraction=0.3,  # Top 30% of slab is "surface"
+    z_threshold=0.3,  # Top 30% of slab height is "surface"
 )
 
 print(f"N atoms in surface region: {stats['n_surface']} / {stats['n_total']}")
@@ -367,7 +367,7 @@ print(f"Bulk N/(N+O) ratio: {stats['bulk_n_ratio']:.1%}")
 stats = analyze_defect_distribution(
     oxynitride_surface,
     reference_atoms=symmetric_surface.atoms,  # Original before defects
-    surface_fraction=0.3,
+    z_threshold=0.3,
     near_n_cutoff=3.0,  # Count vacancies within 3 Å of N
 )
 
@@ -375,7 +375,7 @@ print(f"Vacancies in surface: {stats['vacancy_surface']} / {stats['vacancy_total
 print(f"Vacancies near N: {stats['vacancy_near_n']} ({stats['vacancy_near_n_fraction']:.1%})")
 
 # Analyze entire pool and compare strategies
-pool_stats = analyze_oxynitride_pool(pool, surface_fraction=0.3)
+pool_stats = analyze_oxynitride_pool(pool, z_threshold=0.3)
 
 # Print formatted summary
 print_defect_analysis(pool_stats, title="Oxynitride Pool Analysis")

@@ -669,7 +669,7 @@ class TestDefectPlacementProbabilistic:
             random_seed=42,
         )
 
-        stats = analyze_defect_distribution(oxynitride, surface_fraction=0.3)
+        stats = analyze_defect_distribution(oxynitride, z_threshold=0.3)
 
         # Should have required keys
         assert "n_total" in stats
@@ -703,7 +703,7 @@ class TestDefectPlacementProbabilistic:
             random_seed=42,
         )
 
-        stats = analyze_oxynitride_pool(pool, surface_fraction=0.3)
+        stats = analyze_oxynitride_pool(pool, z_threshold=0.3)
 
         # Should have stats by strategy
         assert "by_strategy" in stats
