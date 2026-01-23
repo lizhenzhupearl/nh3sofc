@@ -50,9 +50,12 @@ print(f"Cell: {surface.atoms.cell.lengths()}")
 
 ```python
 from nh3sofc import write_poscar
+import os
 
 # Create work directory for this surface study
 work_dir = "work/surfaces/LaVO3_001"
+if not os.path.exists(work_dir):
+    os.makedirs(work_dir)
 
 # Get all possible terminations
 terminations = builder.get_all_terminations((0, 0, 1))
@@ -61,7 +64,7 @@ for i, term in enumerate(terminations):
     info = builder.identify_termination(term)
     print(f"Termination {i}: {info['composition']}")
     # Save as POSCAR with proper format (atoms sorted by element automatically)
-    write_poscar(term, f"{work_dir}/POSCAR_term_{i}")
+    write_poscar(term.atoms, f"{work_dir}/POSCAR_term_{i}")
 ```
 
 ### Creating Supercells
@@ -73,6 +76,8 @@ surface = builder.create_surface_with_size(
     size=(2, 2, 6),  # 2x2 supercell, 6 layers
     vacuum=15.0
 )
+print(f"Surface atoms: {len(surface.atoms)}")
+print(f"Cell: {surface.atoms.cell.lengths()}")
 
 # Method 2: Repeat after creation (preserves constraints)
 surface = builder.create_surface(
@@ -81,6 +86,8 @@ surface = builder.create_surface(
     fix_bottom=2
 )
 surface = surface.repeat_xy(2, 2)  # Fixed atoms are preserved
+print(f"Surface atoms: {len(surface.atoms)}")
+print(f"Cell: {surface.atoms.cell.lengths()}")
 ```
 
 ## Step 3: Handling Surface Polarity
@@ -131,6 +138,7 @@ For polar surfaces, symmetric slabs (same termination on both sides) help cancel
 supercell = bulk.make_supercell((2, 2, 1))
 builder = SurfaceBuilder(supercell)
 symmetric_surface = builder.create_symmetric_slab(
+    #termination={"V":1, "O":2},
     miller_index=(0, 0, 1),
     layers=4,
     vacuum=15.0,
@@ -184,7 +192,7 @@ For more control, you can create an oversized slab and trim it yourself:
 # Create oversized slab
 oversized = builder.create_surface(
     miller_index=(0, 0, 1),
-    layers=12,
+    layers=6,
     vacuum=15.0
 )
 
@@ -252,6 +260,7 @@ so each configuration is unique.
 ```python
 # Random placement (default) - uniform probability
 oxynitride_random = defect.create_oxynitride(
+    vacancy_element="N",
     nitrogen_fraction=0.67,
     vacancy_concentration=0.10,
     placement="random"
@@ -263,6 +272,7 @@ oxynitride_random = defect.create_oxynitride(
 #   0.7 = ~70% of surface anions will be N (default)
 #   0.9 = ~90% of surface anions will be N
 oxynitride_surface = defect.create_oxynitride(
+    vacancy_element="N",
     nitrogen_fraction=0.67,
     vacancy_concentration=0.10,
     placement="surface",
@@ -273,6 +283,7 @@ oxynitride_surface = defect.create_oxynitride(
 # Near-N: vacancies preferentially near existing N atoms
 # vacancy_preference controls how strongly vacancies prefer being near N
 oxynitride_near_n = defect.create_oxynitride(
+    vacancy_element="N",
     nitrogen_fraction=0.67,
     vacancy_concentration=0.10,
     placement="near_N",
@@ -330,16 +341,6 @@ for config, p in zip(pool, result["configs"]):
 # - surface_n_preference, vacancy_preference: the preference values used
 # - nitrogen_fraction, vacancy_concentration
 # - config_id: unique identifier
-```
-
-### Create Specific Vacancies
-
-```python
-# Create oxygen vacancies (10% concentration)
-vacancy_structure = defect.create_vacancy(
-    element="O",
-    concentration=0.1
-)
 ```
 
 ### Analyze Defect Distribution
