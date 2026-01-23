@@ -268,6 +268,7 @@ class DefectBuilder:
         placement: str = "random",
         preference: float = 0.7,
         n_positions: Optional[np.ndarray] = None,
+        z_threshold: float = 0.3,
     ) -> List[int]:
         """
         Select atoms based on placement strategy with probability weighting.
@@ -287,6 +288,8 @@ class DefectBuilder:
             Preference strength (0.5 = random, 1.0 = strongly prefer target region)
         n_positions : ndarray, optional
             Positions of N atoms (required for "near_N" placement)
+        z_threshold : float
+            Fraction of slab height considered as surface region (0.3 = top 30%)
 
         Returns
         -------
@@ -300,7 +303,7 @@ class DefectBuilder:
 
         # Calculate selection weights
         weights = self._calculate_selection_weights(
-            candidates, placement, preference, n_positions
+            candidates, placement, preference, n_positions, z_threshold
         )
 
         # Weighted random selection without replacement
@@ -321,6 +324,7 @@ class DefectBuilder:
         placement: str = "random",
         surface_n_preference: float = 0.7,
         vacancy_preference: float = 0.7,
+        z_threshold: float = 0.3,
         random_seed: Optional[int] = None,
     ) -> Atoms:
         """
@@ -352,6 +356,10 @@ class DefectBuilder:
             For "surface": preference for vacancies at surface
             For "near_N": preference for vacancies near N atoms
             0.5 = random, 1.0 = strongly prefer target region. Default: 0.7
+        z_threshold : float
+            Fraction of slab height considered as surface region (0.3 = top 30%).
+            Must match the value used in analyze_defect_distribution() for
+            consistent analysis. Default: 0.3
         random_seed : int, optional
             Random seed for reproducibility
 
@@ -393,7 +401,8 @@ class DefectBuilder:
         # Select O atoms to convert to N based on placement strategy
         # For N placement, use surface_n_preference
         substitute_indices = self._select_with_placement(
-            o_indices, n_to_substitute, placement, preference=surface_n_preference
+            o_indices, n_to_substitute, placement, preference=surface_n_preference,
+            z_threshold=z_threshold
         )
 
         new_atoms = self.atoms.copy()
@@ -426,7 +435,8 @@ class DefectBuilder:
             # For vacancy placement, use vacancy_preference
             vacancy_indices = self._select_with_placement(
                 vacancy_candidates, n_vacancies, placement,
-                preference=vacancy_preference, n_positions=n_positions
+                preference=vacancy_preference, n_positions=n_positions,
+                z_threshold=z_threshold
             )
 
             # Remove vacancy atoms
@@ -444,6 +454,7 @@ class DefectBuilder:
         strategies: Optional[List[str]] = None,
         surface_n_preference: float = 0.7,
         vacancy_preference: float = 0.7,
+        z_threshold: float = 0.3,
         random_seed: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -470,6 +481,10 @@ class DefectBuilder:
             0.5 = random, 0.7 = ~70% surface anions are N, 1.0 = strongly prefer surface
         vacancy_preference : float
             Preference strength for vacancy placement (0.5-1.0)
+        z_threshold : float
+            Fraction of slab height considered as surface region (0.3 = top 30%).
+            Must match the value used in analyze_oxynitride_pool() for consistent
+            analysis. Default: 0.3
         random_seed : int, optional
             Base random seed for reproducibility
 
@@ -484,6 +499,7 @@ class DefectBuilder:
                 "vacancy_concentration": float,
                 "surface_n_preference": float,
                 "vacancy_preference": float,
+                "z_threshold": float,
                 "config_id": int,
             }, ...]
 
@@ -518,6 +534,7 @@ class DefectBuilder:
                     placement=strategy,
                     surface_n_preference=surface_n_preference,
                     vacancy_preference=vacancy_preference,
+                    z_threshold=z_threshold,
                     random_seed=seed,
                 )
 
@@ -528,6 +545,7 @@ class DefectBuilder:
                     "vacancy_concentration": vacancy_concentration,
                     "surface_n_preference": surface_n_preference,
                     "vacancy_preference": vacancy_preference,
+                    "z_threshold": z_threshold,
                     "config_id": config_id,
                 })
                 config_id += 1

@@ -271,6 +271,7 @@ oxynitride_random = defect.create_oxynitride(
 #   0.5 = random distribution
 #   0.7 = ~70% of surface anions will be N (default)
 #   0.9 = ~90% of surface anions will be N
+# z_threshold defines what fraction of slab is "surface" (default: 0.3 = top 30%)
 oxynitride_surface = defect.create_oxynitride(
     vacancy_element="N",
     nitrogen_fraction=0.67,
@@ -278,6 +279,7 @@ oxynitride_surface = defect.create_oxynitride(
     placement="surface",
     surface_n_preference=0.8,   # 80% of surface anions are N
     vacancy_preference=0.6,     # Vacancies slightly prefer surface
+    z_threshold=0.3,            # Top 30% of slab is "surface"
 )
 
 # Near-N: vacancies preferentially near existing N atoms
@@ -297,10 +299,13 @@ oxynitride_near_n = defect.create_oxynitride(
 |-----------|-------|-------------|
 | `surface_n_preference` | 0.5-1.0 | For "surface" placement: fraction of surface anions that are N |
 | `vacancy_preference` | 0.5-1.0 | Preference strength for vacancy placement (surface or near-N) |
+| `z_threshold` | 0.0-1.0 | Fraction of slab height considered as "surface" (default: 0.3 = top 30%) |
 
 - **0.5** = Random (no preference)
 - **0.7** = Moderate preference (default)
 - **0.9-1.0** = Strong preference (most defects in target region)
+
+**Important:** The `z_threshold` used during defect creation must match the value used in `analyze_defect_distribution()` for consistent analysis.
 
 ### Generate Configuration Pool
 
@@ -317,6 +322,7 @@ pool = defect.create_oxynitride_pool(
     n_configs_per_strategy=5,       # 5 configs × 3 strategies = 15 total
     surface_n_preference=0.8,       # For "surface": 80% surface anions are N
     vacancy_preference=0.6,         # Moderate vacancy preference
+    z_threshold=0.3,                # Top 30% is "surface" (for analysis consistency)
 )
 
 print(f"Generated {len(pool)} configurations")
@@ -339,6 +345,7 @@ for config, p in zip(pool, result["configs"]):
 # - atoms: the Atoms object
 # - placement: "random", "surface", or "near_N"
 # - surface_n_preference, vacancy_preference: the preference values used
+# - z_threshold: the surface region definition (for consistent analysis)
 # - nitrogen_fraction, vacancy_concentration
 # - config_id: unique identifier
 ```
@@ -376,7 +383,8 @@ print(f"Vacancies in surface: {stats['vacancy_surface']} / {stats['vacancy_total
 print(f"Vacancies near N: {stats['vacancy_near_n']} ({stats['vacancy_near_n_fraction']:.1%})")
 
 # Analyze entire pool and compare strategies
-pool_stats = analyze_oxynitride_pool(pool, z_threshold=0.3)
+# Use same z_threshold as create_oxynitride_pool() for consistent results
+pool_stats = analyze_oxynitride_pool(pool, z_threshold=pool[0]["z_threshold"])
 
 # Print formatted summary
 print_defect_analysis(pool_stats, title="Oxynitride Pool Analysis")
