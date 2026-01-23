@@ -8,7 +8,10 @@ For materials like LaVO3 → LaVON₂₋ₓ where x controls vacancy concentrati
 """
 
 from pathlib import Path
-from typing import Optional, List, Union, Tuple, Dict, Any
+from typing import Optional, List, Union, Tuple, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from matplotlib.figure import Figure
 import numpy as np
 from ase import Atoms
 from ase.io import write
@@ -1179,3 +1182,229 @@ def print_defect_analysis(
                 print(f"  Vacancies near N: {data['vacancy_near_n_fraction_mean']*100:.1f}% ± {data['vacancy_near_n_fraction_std']*100:.1f}%")
 
     print("=" * 60)
+
+
+def plot_defect_distribution(
+    stats: Dict[str, Any],
+    title: str = "Defect Distribution",
+    save_path: Optional[Union[str, Path]] = None,
+    figsize: Tuple[float, float] = (10, 6),
+    show: bool = True,
+) -> Optional[Any]:
+    """
+    Create bar plots showing defect distribution analysis.
+
+    Supports both single structure analysis and pool analysis with multiple
+    strategies. For single structures, shows N/O counts in surface vs bulk.
+    For pools, shows comparison across placement strategies with error bars.
+
+    Parameters
+    ----------
+    stats : dict
+        Results from analyze_defect_distribution() or analyze_oxynitride_pool()
+    title : str
+        Title for the plot
+    save_path : str or Path, optional
+        Path to save the figure. If None, figure is not saved.
+    figsize : tuple
+        Figure size (width, height) in inches
+    show : bool
+        Whether to display the plot (set False for batch processing)
+
+    Returns
+    -------
+    matplotlib.figure.Figure or None
+        The figure object if matplotlib is available, None otherwise
+
+    Examples
+    --------
+    >>> # Single structure
+    >>> stats = analyze_defect_distribution(oxynitride, reference_atoms=original)
+    >>> plot_defect_distribution(stats, title="LaVON2 Defect Distribution")
+    >>>
+    >>> # Pool comparison
+    >>> pool_stats = analyze_oxynitride_pool(pool, reference_atoms=slab.atoms)
+    >>> plot_defect_distribution(pool_stats, save_path="defect_comparison.png")
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("Warning: matplotlib not available. Cannot create plot.")
+        return None
+
+    # Single structure analysis
+    if "n_total" in stats:
+        return _plot_single_structure(stats, title, save_path, figsize, show)
+    # Pool analysis
+    elif "by_strategy" in stats:
+        return _plot_pool_comparison(stats, title, save_path, figsize, show)
+    else:
+        print("Warning: Unrecognized stats format. Cannot create plot.")
+        return None
+
+
+def _plot_single_structure(
+    stats: Dict[str, Any],
+    title: str,
+    save_path: Optional[Union[str, Path]],
+    figsize: Tuple[float, float],
+    show: bool,
+) -> Any:
+    """Plot defect distribution for a single structure."""
+    import matplotlib.pyplot as plt
+
+    has_vacancies = "vacancy_total" in stats and stats["vacancy_total"] > 0
+    n_plots = 2 if has_vacancies else 1
+
+    fig, axes = plt.subplots(1, n_plots, figsize=figsize)
+    if n_plots == 1:
+        axes = [axes]
+
+    # Plot 1: N/O distribution in surface vs bulk
+    ax1 = axes[0]
+    x = np.arange(2)
+    width = 0.35
+
+    n_counts = [stats["n_surface"], stats["n_bulk"]]
+    o_counts = [stats["o_surface"], stats["o_bulk"]]
+
+    bars1 = ax1.bar(x - width/2, n_counts, width, label="N", color="#2ecc71")
+    bars2 = ax1.bar(x + width/2, o_counts, width, label="O", color="#e74c3c")
+
+    ax1.set_ylabel("Number of atoms")
+    ax1.set_title(f"Anion Distribution (z_threshold={stats['z_threshold']:.0%})")
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(["Surface", "Bulk"])
+    ax1.legend()
+
+    # Add count labels on bars
+    for bars, counts in [(bars1, n_counts), (bars2, o_counts)]:
+        for bar, count in zip(bars, counts):
+            if count > 0:
+                ax1.annotate(f"{count}",
+                            xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                            xytext=(0, 3), textcoords="offset points",
+                            ha="center", va="bottom", fontsize=9)
+
+    # Add N/(N+O) ratio text
+    ax1.text(0.02, 0.98, f"Surface N ratio: {stats['surface_n_ratio']:.1%}\nBulk N ratio: {stats['bulk_n_ratio']:.1%}",
+             transform=ax1.transAxes, fontsize=10, verticalalignment="top",
+             bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
+
+    # Plot 2: Vacancy distribution (if available)
+    if has_vacancies:
+        ax2 = axes[1]
+        categories = ["Surface", "Bulk", f"Near N\n(<{stats['near_n_cutoff']}Å)"]
+        values = [stats["vacancy_surface"], stats["vacancy_bulk"], stats["vacancy_near_n"]]
+        colors = ["#3498db", "#95a5a6", "#9b59b6"]
+
+        bars = ax2.bar(categories, values, color=colors)
+        ax2.set_ylabel("Number of vacancies")
+        ax2.set_title(f"Vacancy Distribution (total: {stats['vacancy_total']})")
+
+        # Add count labels
+        for bar, val in zip(bars, values):
+            if val > 0:
+                ax2.annotate(f"{val}",
+                            xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                            xytext=(0, 3), textcoords="offset points",
+                            ha="center", va="bottom", fontsize=9)
+
+        # Add percentage text
+        ax2.text(0.02, 0.98,
+                 f"Surface: {stats['vacancy_surface_fraction']:.1%}\nNear N: {stats['vacancy_near_n_fraction']:.1%}",
+                 transform=ax2.transAxes, fontsize=10, verticalalignment="top",
+                 bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
+
+    fig.suptitle(title, fontsize=12, fontweight="bold")
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Saved plot to: {save_path}")
+
+    if show:
+        plt.show()
+
+    return fig
+
+
+def _plot_pool_comparison(
+    stats: Dict[str, Any],
+    title: str,
+    save_path: Optional[Union[str, Path]],
+    figsize: Tuple[float, float],
+    show: bool,
+) -> Any:
+    """Plot comparison of defect distribution across strategies."""
+    import matplotlib.pyplot as plt
+
+    strategies = list(stats["by_strategy"].keys())
+    n_strategies = len(strategies)
+
+    # Check if vacancy data is available
+    has_vacancies = "vacancy_surface_fraction_mean" in stats["by_strategy"].get(strategies[0], {})
+    n_plots = 2 if has_vacancies else 1
+
+    fig, axes = plt.subplots(1, n_plots, figsize=figsize)
+    if n_plots == 1:
+        axes = [axes]
+
+    x = np.arange(n_strategies)
+    width = 0.35
+
+    # Plot 1: N ratio comparison (surface vs bulk)
+    ax1 = axes[0]
+
+    surface_means = [stats["by_strategy"][s]["surface_n_ratio_mean"] * 100 for s in strategies]
+    surface_stds = [stats["by_strategy"][s]["surface_n_ratio_std"] * 100 for s in strategies]
+    bulk_means = [stats["by_strategy"][s]["bulk_n_ratio_mean"] * 100 for s in strategies]
+    bulk_stds = [stats["by_strategy"][s]["bulk_n_ratio_std"] * 100 for s in strategies]
+
+    ax1.bar(x - width/2, surface_means, width, yerr=surface_stds,
+            label="Surface N/(N+O)", color="#2ecc71", capsize=3)
+    ax1.bar(x + width/2, bulk_means, width, yerr=bulk_stds,
+            label="Bulk N/(N+O)", color="#95a5a6", capsize=3)
+
+    ax1.set_ylabel("N/(N+O) Ratio (%)")
+    ax1.set_title("N Distribution by Region")
+    ax1.set_xticks(x)
+    ax1.set_xticklabels([s.replace("_", " ").title() for s in strategies])
+    ax1.legend(loc="upper right")
+    ax1.set_ylim(0, 100)
+
+    # Add horizontal line at 50% (random expectation)
+    ax1.axhline(y=50, color="gray", linestyle="--", alpha=0.5, label="Random (50%)")
+
+    # Plot 2: Vacancy distribution (if available)
+    if has_vacancies:
+        ax2 = axes[1]
+
+        vac_surface_means = [stats["by_strategy"][s]["vacancy_surface_fraction_mean"] * 100 for s in strategies]
+        vac_surface_stds = [stats["by_strategy"][s]["vacancy_surface_fraction_std"] * 100 for s in strategies]
+        vac_near_n_means = [stats["by_strategy"][s]["vacancy_near_n_fraction_mean"] * 100 for s in strategies]
+        vac_near_n_stds = [stats["by_strategy"][s]["vacancy_near_n_fraction_std"] * 100 for s in strategies]
+
+        ax2.bar(x - width/2, vac_surface_means, width, yerr=vac_surface_stds,
+                label="In Surface", color="#3498db", capsize=3)
+        ax2.bar(x + width/2, vac_near_n_means, width, yerr=vac_near_n_stds,
+                label="Near N", color="#9b59b6", capsize=3)
+
+        ax2.set_ylabel("Fraction of Vacancies (%)")
+        ax2.set_title("Vacancy Distribution")
+        ax2.set_xticks(x)
+        ax2.set_xticklabels([s.replace("_", " ").title() for s in strategies])
+        ax2.legend(loc="upper right")
+        ax2.set_ylim(0, 100)
+
+    fig.suptitle(f"{title} (n={stats['overall']['n_configs']} configs)", fontsize=12, fontweight="bold")
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Saved plot to: {save_path}")
+
+    if show:
+        plt.show()
+
+    return fig

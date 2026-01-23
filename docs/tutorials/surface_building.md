@@ -359,6 +359,7 @@ from nh3sofc.structure import (
     analyze_defect_distribution,
     analyze_oxynitride_pool,
     print_defect_analysis,
+    plot_defect_distribution,
 )
 
 # Analyze a single configuration
@@ -414,6 +415,27 @@ NEAR_N Strategy (5 configs):
   Vacancies near N: 68.3% ± 8.5%
 ============================================================
 ```
+
+### Visualize Defect Distribution
+
+Create bar plots to visualize the analysis results:
+
+```python
+# Plot single structure analysis
+plot_defect_distribution(stats, title="LaVON2 Surface Structure")
+
+# Plot pool comparison across strategies (with error bars)
+plot_defect_distribution(
+    pool_stats,
+    title="Oxynitride Pool Comparison",
+    save_path="work/defect_distribution.png",  # Save to file
+    show=True,  # Also display interactively
+)
+```
+
+The plots show:
+- **Single structure**: N/O atom counts in surface vs bulk regions, plus vacancy distribution
+- **Pool comparison**: N/(N+O) ratios by strategy with error bars, comparing surface vs bulk enrichment
 
 ## Step 6: Visualize and Save
 

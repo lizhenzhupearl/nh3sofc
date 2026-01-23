@@ -14,6 +14,7 @@ from .defects import (
     analyze_defect_distribution,
     analyze_oxynitride_pool,
     print_defect_analysis,
+    plot_defect_distribution,
 )
 from .decomposition import (
     DecompositionBuilder,
@@ -45,6 +46,7 @@ __all__ = [
     "analyze_defect_distribution",
     "analyze_oxynitride_pool",
     "print_defect_analysis",
+    "plot_defect_distribution",
     # Decomposition
     "DecompositionBuilder",
     "generate_decomposition_pathway",
