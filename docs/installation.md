@@ -46,7 +46,8 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 
 # Or GPU version (CUDA 11.8):
 # pip install torch --index-url https://download.pytorch.org/whl/cu118
-
+pip install mace-torch
+pip install spglib
 # Install nh3sofc with all dependencies
 pip install -e .
 ```
