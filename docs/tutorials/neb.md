@@ -24,9 +24,9 @@ Initial State → TS → Final State
 ```python
 from ase.io import read
 
-# Load optimized initial and final structures
-initial = read("nh3_on_surface.traj")  # NH3*
-final = read("nh2_h_on_surface.traj")  # NH2* + H*
+# Load optimized initial and final structures (POSCAR format)
+initial = read("work/decomposition/LaVO3_001/NH3/relaxed.vasp", format="vasp")  # NH3*
+final = read("work/decomposition/LaVO3_001/NH2_H/relaxed.vasp", format="vasp")  # NH2* + H*
 ```
 
 **Important:** Both endpoints must be fully optimized (converged relaxation).
@@ -97,9 +97,10 @@ print(f"Forward barrier: {results['barrier_forward']:.3f} eV")
 print(f"Reverse barrier: {results['barrier_reverse']:.3f} eV")
 print(f"TS image index: {results['ts_image']}")
 
-# Get transition state structure
+# Get transition state structure and save as POSCAR
+from nh3sofc import write_poscar
 ts = results["ts_structure"]
-ts.write("transition_state.xyz")
+write_poscar(ts, "work/neb/NH3_to_NH2_H/ts.vasp")
 ```
 
 ## Step 5: Visualize
@@ -165,16 +166,17 @@ else:
 ```python
 from ase.io import read
 from nh3sofc.workflows import NEBWorkflow, FrequencyWorkflow
+from nh3sofc import write_poscar
 
-# 1. Load endpoints
-initial = read("nh3_optimized.traj")
-final = read("nh2_h_optimized.traj")
+# 1. Load endpoints (POSCAR format)
+initial = read("work/decomposition/LaVO3_001/NH3/relaxed.vasp", format="vasp")
+final = read("work/decomposition/LaVO3_001/NH2_H/relaxed.vasp", format="vasp")
 
-# 2. Setup NEB
+# 2. Setup NEB with meaningful work directory
 neb = NEBWorkflow(
     initial=initial,
     final=final,
-    work_dir="./neb",
+    work_dir="work/neb/LaVO3_001_NH3_to_NH2_H",
     n_images=7,
     encut=520,
     hubbard_u={"V": 3.25},
@@ -189,8 +191,12 @@ images = neb.run_mace(fmax=0.05)
 results = neb.parse_results()
 print(f"Barrier: {results['barrier_forward']:.3f} eV")
 
-# 5. Plot
-neb.plot_energy_profile("barrier.png")
+# 5. Save transition state
+ts = results["ts_structure"]
+write_poscar(ts, "work/neb/LaVO3_001_NH3_to_NH2_H/ts.vasp")
+
+# 6. Plot
+neb.plot_energy_profile("work/neb/LaVO3_001_NH3_to_NH2_H/barrier.png")
 ```
 
 ## Next Steps
