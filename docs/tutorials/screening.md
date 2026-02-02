@@ -162,15 +162,18 @@ configs = placer.add_grid(
 # Generates 3 × 3 × 4 = 36 configurations
 
 # Method 3: Site-specific placement (most physically meaningful)
+# Step 1: Identify surface atoms (top 20% of slab by z-coordinate)
+# Step 2: Filter to only La and V atoms among those surface atoms
 configs = placer.add_on_site(
     "NH3",
-    atom_types=["La", "V"],  # Place above La and V atoms
+    atom_types=["La", "V"],  # Select La/V from surface atoms only
     n_orientations=5,         # 5 orientations per site
     height=2.0,
     z_threshold=0.2,          # Top 20% of slab = surface
     random_seed=42,
 )
-# Only places on surface atoms; subsurface atoms are automatically filtered
+# Places above La and V atoms that are ON THE SURFACE
+# Subsurface La/V atoms are automatically excluded
 
 # Method 4: Collision-aware random placement
 configs = placer.add_with_collision(

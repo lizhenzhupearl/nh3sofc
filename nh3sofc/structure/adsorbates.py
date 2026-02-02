@@ -325,7 +325,14 @@ class AdsorbatePlacer:
         Add adsorbate above specific surface atoms (Method 4).
 
         This is the most physically meaningful placement method,
-        targeting specific adsorption sites.
+        targeting specific adsorption sites. The selection process is:
+
+        1. First, identify surface atoms (top fraction defined by z_threshold)
+        2. Then, filter by atom_types if specified (e.g., only La, V on surface)
+        3. Or, filter by site_indices if specified (validated against surface)
+
+        This ensures adsorbates are only placed on atoms that are actually
+        exposed at the surface, not buried in the bulk.
 
         Parameters
         ----------
@@ -336,7 +343,8 @@ class AdsorbatePlacer:
             or "hollow" (between triplets). Bridge and hollow require
             CatKit for accurate site detection.
         atom_types : list, optional
-            List of element symbols to target (e.g., ["La", "V"])
+            List of element symbols to target (e.g., ["La", "V"]).
+            Only atoms of these types that are ON THE SURFACE will be used.
         site_indices : list, optional
             Specific atom indices to use as sites. These are validated
             against surface atoms; non-surface indices are filtered out
@@ -346,7 +354,7 @@ class AdsorbatePlacer:
         height : float
             Height above surface
         z_threshold : float
-            Fraction of slab considered as surface
+            Fraction of slab height considered as surface (0.2 = top 20%)
         random_seed : int, optional
             Random seed
 
@@ -354,6 +362,12 @@ class AdsorbatePlacer:
         -------
         list
             List of Atoms objects for each site/orientation
+
+        Examples
+        --------
+        >>> # Place NH3 on La atoms that are on the surface
+        >>> configs = placer.add_on_site("NH3", atom_types=["La"])
+        >>> # La atoms in the bulk are automatically excluded
         """
         if random_seed is not None:
             np.random.seed(random_seed)
