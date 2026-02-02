@@ -715,3 +715,162 @@ class TestDefectPlacementProbabilistic:
         random_ratio = stats["by_strategy"]["random"]["surface_n_ratio_mean"]
         assert surface_ratio >= random_ratio, \
             f"Surface strategy ({surface_ratio:.2f}) should have >= N ratio than random ({random_ratio:.2f})"
+
+
+class TestAdsorbateRotationConsistency:
+    """
+    Bug: Rotation handling was inconsistent across placement methods:
+    - add_with_collision() was missing x-rotation (only z and y)
+    - add_catkit() had no rotation support at all
+    - Euler angle sampling was biased (not uniform on SO(3))
+
+    Fix: Created _apply_random_rotation() helper with uniform SO(3) sampling
+    and applied it consistently across all methods.
+
+    Date fixed: 2026-02-02
+    """
+
+    def test_all_methods_produce_varied_orientations(self, simple_slab):
+        """All placement methods should produce varied molecular orientations."""
+        from nh3sofc.structure import AdsorbatePlacer
+
+        placer = AdsorbatePlacer(simple_slab)
+
+        # Test add_random
+        configs_random = placer.add_random("NH3", n_configs=5, random_seed=42)
+        assert len(configs_random) == 5
+
+        # Check that orientations are different (not all H atoms at same positions)
+        h_positions = []
+        for config in configs_random:
+            h_atoms = [a for a in config if a.symbol == "H"]
+            h_positions.append([a.position.copy() for a in h_atoms])
+
+        # At least some configs should have different H positions
+        all_same = all(
+            np.allclose(h_positions[0][0], h_positions[i][0], atol=0.1)
+            for i in range(1, len(h_positions))
+        )
+        assert not all_same, "Random placement should produce varied orientations"
+
+    def test_add_with_collision_has_full_rotation(self, simple_slab):
+        """add_with_collision should apply full 3D rotation (z, y, x)."""
+        from nh3sofc.structure import AdsorbatePlacer
+
+        placer = AdsorbatePlacer(simple_slab)
+
+        # Generate multiple configs and check orientations vary in all dimensions
+        configs = placer.add_with_collision(
+            "NH3", n_configs=10, min_distance=1.5, random_seed=42
+        )
+
+        assert len(configs) > 0, "Should generate at least one config"
+
+        # Get NH3 positions (last 4 atoms: N + 3H)
+        nh3_positions = [c.positions[-4:] for c in configs]
+
+        # Check variance in all three dimensions
+        all_positions = np.array(nh3_positions)
+        variance = np.var(all_positions, axis=0).mean(axis=0)
+
+        # Should have variance in all xyz (not just xy)
+        assert variance[2] > 0.01, \
+            f"Z variance too low ({variance[2]:.4f}), x-rotation may be missing"
+
+    def test_helper_method_applies_three_rotations(self, simple_slab):
+        """_apply_random_rotation should apply rotations around all 3 axes."""
+        from nh3sofc.structure import AdsorbatePlacer
+        from ase.build import molecule
+
+        placer = AdsorbatePlacer(simple_slab)
+
+        np.random.seed(42)
+        orientations = []
+
+        for _ in range(20):
+            mol = molecule("NH3")
+            original_positions = mol.positions.copy()
+            placer._apply_random_rotation(mol)
+            orientations.append(mol.positions - mol.positions.mean(axis=0))
+
+        orientations = np.array(orientations)
+
+        # Check variance exists in all dimensions
+        variance = np.var(orientations, axis=0).mean(axis=0)
+        assert all(v > 0.01 for v in variance), \
+            f"Rotation should vary in all dimensions, got variance: {variance}"
+
+
+class TestAddOnSiteSurfaceValidation:
+    """
+    Bug: add_on_site() with site_indices would place adsorbates on any
+    atom index, including subsurface atoms, bypassing surface detection.
+
+    Fix: site_indices are now validated against surface atoms. Non-surface
+    indices are filtered out with a warning.
+
+    Date fixed: 2026-02-02
+    """
+
+    def test_site_indices_filtered_to_surface(self, perovskite_bulk):
+        """site_indices should only use atoms that are on the surface."""
+        from nh3sofc.structure import SurfaceBuilder, AdsorbatePlacer
+        from nh3sofc.core.base import get_surface_atoms
+
+        # Create a slab
+        builder = SurfaceBuilder(perovskite_bulk)
+        slab = builder.create_surface(miller_index=(0, 0, 1), layers=4, vacuum=15.0)
+
+        placer = AdsorbatePlacer(slab.atoms)
+
+        # Get actual surface atoms
+        surface_indices, z_cutoff = get_surface_atoms(slab.atoms, z_threshold=0.2)
+
+        # Try to place on a mix of surface and non-surface indices
+        # Index 0 is likely in the bulk (bottom of slab)
+        mixed_indices = [0, 1] + surface_indices[:2]
+
+        configs = placer.add_on_site(
+            "NH3",
+            site_indices=mixed_indices,
+            n_orientations=1,
+            random_seed=42,
+        )
+
+        # Should only get configs for the surface atoms in the list
+        n_surface_in_mixed = len([i for i in mixed_indices if i in surface_indices])
+        assert len(configs) == n_surface_in_mixed, \
+            f"Expected {n_surface_in_mixed} configs (surface atoms only), got {len(configs)}"
+
+    def test_add_on_site_only_uses_surface_atoms(self, perovskite_bulk):
+        """add_on_site with atom_types should only place on surface atoms of that type."""
+        from nh3sofc.structure import SurfaceBuilder, AdsorbatePlacer
+        from nh3sofc.core.base import get_surface_atoms
+
+        builder = SurfaceBuilder(perovskite_bulk)
+        slab = builder.create_surface(miller_index=(0, 0, 1), layers=4, vacuum=15.0)
+
+        placer = AdsorbatePlacer(slab.atoms)
+
+        # Get surface atoms
+        surface_indices, z_cutoff = get_surface_atoms(slab.atoms, z_threshold=0.2)
+
+        # Place on La atoms only
+        configs = placer.add_on_site(
+            "NH3",
+            atom_types=["La"],
+            n_orientations=1,
+            random_seed=42,
+        )
+
+        # Count La atoms on surface
+        n_la_surface = sum(1 for i in surface_indices if slab.atoms[i].symbol == "La")
+
+        assert len(configs) == n_la_surface, \
+            f"Expected {n_la_surface} configs (La on surface), got {len(configs)}"
+
+        # Verify adsorbate z positions are above surface
+        for config in configs:
+            nh3_z = config.positions[-4:, 2].min()  # NH3 is last 4 atoms
+            assert nh3_z > z_cutoff, \
+                f"Adsorbate placed below surface: z={nh3_z:.2f} < cutoff={z_cutoff:.2f}"

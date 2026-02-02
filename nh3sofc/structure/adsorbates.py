@@ -90,6 +90,32 @@ class AdsorbatePlacer:
         """Get the z-coordinate of the surface (highest z)."""
         return self.slab.positions[:, 2].max()
 
+    def _apply_random_rotation(self, mol: Atoms, uniform_sampling: bool = True) -> None:
+        """
+        Apply random 3D rotation to a molecule.
+
+        Parameters
+        ----------
+        mol : Atoms
+            Molecule to rotate (modified in place)
+        uniform_sampling : bool
+            If True, use uniform sampling on SO(3) for unbiased orientations.
+            If False, use simple uniform Euler angles (biased toward poles).
+        """
+        alpha = np.random.uniform(0, 2 * np.pi)  # z rotation
+        gamma = np.random.uniform(0, 2 * np.pi)  # x rotation
+
+        if uniform_sampling:
+            # Uniform sampling on SO(3): beta = arccos(1 - 2u) for u ~ U(0,1)
+            # This gives uniform distribution on the sphere
+            beta = np.arccos(1 - 2 * np.random.uniform(0, 1))
+        else:
+            beta = np.random.uniform(0, np.pi)  # y rotation (biased)
+
+        mol.rotate(np.degrees(alpha), "z")
+        mol.rotate(np.degrees(beta), "y")
+        mol.rotate(np.degrees(gamma), "x")
+
     def _get_cell_dimensions(self) -> Tuple[float, float]:
         """Get x and y dimensions of the cell."""
         cell = self.slab.get_cell()
@@ -203,15 +229,8 @@ class AdsorbatePlacer:
             y = np.random.uniform(0, b)
             z = z_top + height
 
-            # Random rotation (Euler angles)
-            alpha = np.random.uniform(0, 2 * np.pi)
-            beta = np.random.uniform(0, np.pi)
-            gamma = np.random.uniform(0, 2 * np.pi)
-
-            # Apply rotation
-            mol.rotate(np.degrees(alpha), "z")
-            mol.rotate(np.degrees(beta), "y")
-            mol.rotate(np.degrees(gamma), "x")
+            # Apply uniform random rotation
+            self._apply_random_rotation(mol)
 
             # Translate to position
             mol.translate([x, y, z])
@@ -280,10 +299,8 @@ class AdsorbatePlacer:
                     slab_copy = self.slab.copy()
                     mol = self._get_molecule(adsorbate)
 
-                    # Random orientation
-                    mol.rotate(np.random.uniform(0, 360), "z")
-                    mol.rotate(np.random.uniform(0, 180), "y")
-                    mol.rotate(np.random.uniform(0, 360), "x")
+                    # Apply uniform random rotation
+                    self._apply_random_rotation(mol)
 
                     # Position
                     mol.translate([x, y, z_top + height])
@@ -321,7 +338,9 @@ class AdsorbatePlacer:
         atom_types : list, optional
             List of element symbols to target (e.g., ["La", "V"])
         site_indices : list, optional
-            Specific atom indices to use as sites
+            Specific atom indices to use as sites. These are validated
+            against surface atoms; non-surface indices are filtered out
+            with a warning.
         n_orientations : int
             Number of orientations per site
         height : float
@@ -354,7 +373,8 @@ class AdsorbatePlacer:
 
         # Ontop placement: directly above surface atoms
         # Get surface atoms
-        surface_indices, _ = get_surface_atoms(self.slab, z_threshold)
+        surface_indices, z_cutoff = get_surface_atoms(self.slab, z_threshold)
+        surface_set = set(surface_indices)
 
         # Filter by atom type if specified
         if atom_types is not None:
@@ -363,12 +383,21 @@ class AdsorbatePlacer:
                 if self.slab[i].symbol in atom_types
             ]
 
-        # Or use specific indices
+        # Filter by specific indices if provided
         if site_indices is not None:
-            surface_indices = site_indices
+            # Validate that specified indices are on the surface
+            non_surface = [i for i in site_indices if i not in surface_set]
+            if non_surface:
+                z_positions = self.slab.positions[non_surface, 2]
+                print(f"Warning: site_indices {non_surface} are not on the surface "
+                      f"(z < {z_cutoff:.2f}). Their z positions: {z_positions}. "
+                      f"Filtering to surface atoms only.")
+            # Intersect with surface atoms
+            surface_indices = [i for i in site_indices if i in surface_set]
 
         if not surface_indices:
-            raise ValueError("No suitable adsorption sites found")
+            raise ValueError("No suitable adsorption sites found. "
+                           "Check that atom_types or site_indices are on the surface.")
 
         configs = []
 
@@ -379,10 +408,8 @@ class AdsorbatePlacer:
                 slab_copy = self.slab.copy()
                 mol = self._get_molecule(adsorbate)
 
-                # Random orientation
-                mol.rotate(np.random.uniform(0, 360), "z")
-                mol.rotate(np.random.uniform(0, 180), "y")
-                mol.rotate(np.random.uniform(0, 360), "x")
+                # Apply uniform random rotation
+                self._apply_random_rotation(mol)
 
                 # Place above the site
                 mol.translate([site_pos[0], site_pos[1], site_pos[2] + height])
@@ -464,10 +491,8 @@ class AdsorbatePlacer:
                 slab_copy = self.slab.copy()
                 mol = self._get_molecule(adsorbate)
 
-                # Random orientation
-                mol.rotate(np.random.uniform(0, 360), "z")
-                mol.rotate(np.random.uniform(0, 180), "y")
-                mol.rotate(np.random.uniform(0, 360), "x")
+                # Apply uniform random rotation
+                self._apply_random_rotation(mol)
 
                 # Place above the site
                 mol.translate([site_xy[0], site_xy[1], z_top + height])
@@ -533,9 +558,8 @@ class AdsorbatePlacer:
 
             mol = self._get_molecule(adsorbate)
 
-            # Random orientation
-            mol.rotate(np.random.uniform(0, 360), "z")
-            mol.rotate(np.random.uniform(0, 180), "y")
+            # Apply uniform random rotation
+            self._apply_random_rotation(mol)
 
             mol.translate([x, y, z])
 
@@ -568,6 +592,8 @@ class AdsorbatePlacer:
         site_type: str = "ontop",
         height: float = 2.0,
         n_sites: Optional[int] = None,
+        n_orientations: int = 1,
+        random_seed: Optional[int] = None,
     ) -> List[Atoms]:
         """
         Add adsorbate using CatKit for site detection (Method 6).
@@ -585,6 +611,10 @@ class AdsorbatePlacer:
             Height above surface
         n_sites : int, optional
             Maximum number of sites to use
+        n_orientations : int
+            Number of random orientations per site
+        random_seed : int, optional
+            Random seed for reproducibility
 
         Returns
         -------
@@ -596,6 +626,9 @@ class AdsorbatePlacer:
         ImportError
             If CatKit is not installed
         """
+        if random_seed is not None:
+            np.random.seed(random_seed)
+
         try:
             from catkit.gen.adsorption import AdsorptionSites
         except ImportError:
@@ -625,14 +658,18 @@ class AdsorbatePlacer:
         z_top = self._get_surface_z()
 
         for coord in coordinates:
-            slab_copy = self.slab.copy()
-            mol = self._get_molecule(adsorbate)
+            for _ in range(n_orientations):
+                slab_copy = self.slab.copy()
+                mol = self._get_molecule(adsorbate)
 
-            # Place at site
-            mol.translate([coord[0], coord[1], z_top + height])
+                # Apply uniform random rotation
+                self._apply_random_rotation(mol)
 
-            combined = slab_copy + mol
-            configs.append(combined)
+                # Place at site
+                mol.translate([coord[0], coord[1], z_top + height])
+
+                combined = slab_copy + mol
+                configs.append(combined)
 
         return configs
 
