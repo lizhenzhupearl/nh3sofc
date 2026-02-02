@@ -129,6 +129,88 @@ paths = workflow.setup()
 # Creates 5 × 4 = 20 calculations
 ```
 
+### Generating Adsorbate Configurations
+
+For fine-grained control over adsorbate placement, use `AdsorbatePlacer` directly.
+All placement methods use **uniform sampling on SO(3)** for unbiased molecular
+orientations, ensuring proper coverage of configurational space.
+
+```python
+from nh3sofc.structure import AdsorbatePlacer, SlabStructure
+
+# Load surface
+slab = SlabStructure.from_file("surface.vasp")
+placer = AdsorbatePlacer(slab)
+
+# Method 1: Random placement with random orientations
+configs = placer.add_random(
+    "NH3",
+    n_configs=20,
+    height=2.0,
+    random_seed=42,
+)
+# Generates 20 configurations with uniformly sampled positions and orientations
+
+# Method 2: Grid-based placement with multiple orientations per point
+configs = placer.add_grid(
+    "NH3",
+    grid_size=(3, 3),    # 3x3 grid of positions
+    orientations=4,       # 4 random orientations per grid point
+    height=2.0,
+    random_seed=42,
+)
+# Generates 3 × 3 × 4 = 36 configurations
+
+# Method 3: Site-specific placement (most physically meaningful)
+configs = placer.add_on_site(
+    "NH3",
+    atom_types=["La", "V"],  # Place above La and V atoms
+    n_orientations=5,         # 5 orientations per site
+    height=2.0,
+    z_threshold=0.2,          # Top 20% of slab = surface
+    random_seed=42,
+)
+# Only places on surface atoms; subsurface atoms are automatically filtered
+
+# Method 4: Collision-aware random placement
+configs = placer.add_with_collision(
+    "NH3",
+    n_configs=10,
+    min_distance=2.0,  # Minimum atom-atom distance
+    height=2.0,
+    random_seed=42,
+)
+```
+
+#### Rotation Sampling
+
+All methods apply uniform random rotations using proper SO(3) sampling:
+
+```python
+# The rotation uses: β = arccos(1 - 2u) for uniform spherical coverage
+# This avoids clustering near the "poles" that occurs with naive sampling
+
+# For reproducibility, always set random_seed
+configs_a = placer.add_random("NH3", n_configs=10, random_seed=42)
+configs_b = placer.add_random("NH3", n_configs=10, random_seed=42)
+# configs_a and configs_b are identical
+```
+
+#### Filtering Unique Configurations
+
+After generating many configurations, filter duplicates:
+
+```python
+from nh3sofc.structure.adsorbates import filter_unique_configs, save_configs
+
+# Remove duplicates based on RMSD
+unique = filter_unique_configs(configs, threshold=0.5)
+print(f"Filtered {len(configs)} → {len(unique)} unique configurations")
+
+# Save for calculations
+paths = save_configs(unique, output_dir="./adsorbate_configs", format="vasp")
+```
+
 ## Visualizing Results
 
 ```python
@@ -157,21 +239,21 @@ plt.savefig('screening_heatmap.png', dpi=150)
 from ase.io import read
 from nh3sofc.workflows import ScreeningWorkflow
 
-# 1. Load base structure
-surface = read("surface.xyz")
+# 1. Load base structure (POSCAR format)
+surface = read("work/surfaces/LaVO3_001/surface.vasp", format="vasp")
 
-# 2. Define screening
+# 2. Define screening with meaningful work directory
 workflow = ScreeningWorkflow(
     base_structure=surface,
     parameter_space={
         "vacancy_concentration": [0.0, 0.10, 0.20],
         "nitrogen_fraction": [0.5, 0.67],
     },
-    work_dir="./screening",
+    work_dir="work/screening/LaVON_composition",
     encut=520,
 )
 
-# 3. Setup
+# 3. Setup (generates POSCAR files with atoms sorted by element)
 workflow.setup()
 
 # 4. After completion, analyze
@@ -182,7 +264,7 @@ optimal = workflow.find_optimal("energy")
 print(f"Best: {optimal}")
 
 # 6. Save results
-results.to_csv("screening_results.csv")
+results.to_csv("work/screening/LaVON_composition/results.csv")
 ```
 
 ## Best Practices
