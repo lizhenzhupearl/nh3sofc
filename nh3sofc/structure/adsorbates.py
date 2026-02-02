@@ -318,7 +318,7 @@ class AdsorbatePlacer:
         site_indices: Optional[List[int]] = None,
         n_orientations: int = 5,
         height: float = 2.0,
-        z_threshold: float = 0.2,
+        layer_tolerance: float = 2.0,
         random_seed: Optional[int] = None,
     ) -> List[Atoms]:
         """
@@ -327,7 +327,7 @@ class AdsorbatePlacer:
         This is the most physically meaningful placement method,
         targeting specific adsorption sites. The selection process is:
 
-        1. First, identify surface atoms (top fraction defined by z_threshold)
+        1. First, identify surface atoms (within layer_tolerance of topmost atom)
         2. Then, filter by atom_types if specified (e.g., only La, V on surface)
         3. Or, filter by site_indices if specified (validated against surface)
 
@@ -353,8 +353,9 @@ class AdsorbatePlacer:
             Number of orientations per site
         height : float
             Height above surface
-        z_threshold : float
-            Fraction of slab height considered as surface (0.2 = top 20%)
+        layer_tolerance : float
+            Distance (Angstrom) from topmost atom to consider as surface.
+            Default 2.0 Å captures the top bilayer in perovskites.
         random_seed : int, optional
             Random seed
 
@@ -365,9 +366,12 @@ class AdsorbatePlacer:
 
         Examples
         --------
-        >>> # Place NH3 on La atoms that are on the surface
+        >>> # Place NH3 on La atoms in the top bilayer
         >>> configs = placer.add_on_site("NH3", atom_types=["La"])
         >>> # La atoms in the bulk are automatically excluded
+        >>>
+        >>> # Use smaller tolerance for only the topmost layer
+        >>> configs = placer.add_on_site("NH3", atom_types=["V"], layer_tolerance=1.0)
         """
         if random_seed is not None:
             np.random.seed(random_seed)
@@ -382,12 +386,14 @@ class AdsorbatePlacer:
                 # Fallback: compute simple bridge/hollow sites
                 return self._add_on_computed_site(
                     adsorbate, site_type_lower, atom_types,
-                    n_orientations, height, z_threshold
+                    n_orientations, height, layer_tolerance
                 )
 
         # Ontop placement: directly above surface atoms
-        # Get surface atoms
-        surface_indices, z_cutoff = get_surface_atoms(self.slab, z_threshold)
+        # Get surface atoms (within layer_tolerance of topmost atom)
+        surface_indices, z_cutoff = get_surface_atoms(
+            self.slab, layer_tolerance=layer_tolerance
+        )
         surface_set = set(surface_indices)
 
         # Filter by atom type if specified
@@ -440,7 +446,7 @@ class AdsorbatePlacer:
         atom_types: Optional[List[str]],
         n_orientations: int,
         height: float,
-        z_threshold: float,
+        layer_tolerance: float,
     ) -> List[Atoms]:
         """
         Fallback for bridge/hollow sites when CatKit is not available.
@@ -449,7 +455,7 @@ class AdsorbatePlacer:
         """
         from scipy.spatial import Delaunay
 
-        surface_indices, _ = get_surface_atoms(self.slab, z_threshold)
+        surface_indices, _ = get_surface_atoms(self.slab, layer_tolerance=layer_tolerance)
 
         # Filter by atom type if specified
         if atom_types is not None:
@@ -693,7 +699,7 @@ class AdsorbatePlacer:
         site_type: str = "ontop",
         atom_types: Optional[List[str]] = None,
         height: float = 2.0,
-        z_threshold: float = 0.2,
+        layer_tolerance: float = 2.0,
     ) -> List[Atoms]:
         """
         Generate configurations for all sites of a given type.
@@ -710,8 +716,8 @@ class AdsorbatePlacer:
             Element types to use as sites
         height : float
             Height above surface
-        z_threshold : float
-            Fraction of slab considered as surface
+        layer_tolerance : float
+            Distance (Angstrom) from topmost atom to consider as surface
 
         Returns
         -------
@@ -724,7 +730,7 @@ class AdsorbatePlacer:
                 atom_types=atom_types,
                 n_orientations=1,
                 height=height,
-                z_threshold=z_threshold,
+                layer_tolerance=layer_tolerance,
             )
         else:
             # Try CatKit for other site types
@@ -736,21 +742,23 @@ class AdsorbatePlacer:
                     "Install with: pip install catkit"
                 )
 
-    def get_site_info(self, z_threshold: float = 0.2) -> Dict[str, Any]:
+    def get_site_info(self, layer_tolerance: float = 2.0) -> Dict[str, Any]:
         """
         Get information about available adsorption sites.
 
         Parameters
         ----------
-        z_threshold : float
-            Fraction of slab considered as surface
+        layer_tolerance : float
+            Distance (Angstrom) from topmost atom to consider as surface
 
         Returns
         -------
         dict
             Site information including counts by element
         """
-        surface_indices, z_cutoff = get_surface_atoms(self.slab, z_threshold)
+        surface_indices, z_cutoff = get_surface_atoms(
+            self.slab, layer_tolerance=layer_tolerance
+        )
 
         # Count by element
         element_counts = {}

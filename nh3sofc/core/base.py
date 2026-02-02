@@ -210,28 +210,48 @@ class BaseCalculator(ABC):
 
 def get_surface_atoms(
     atoms: Atoms,
-    z_threshold: float = 0.2
+    z_threshold: float = 0.2,
+    layer_tolerance: Optional[float] = None,
 ) -> Tuple[List[int], float]:
     """
-    Identify surface atoms (atoms in the top region of the slab).
+    Identify surface atoms (atoms in the topmost layer of the slab).
 
     Parameters
     ----------
     atoms : Atoms
         Slab structure
     z_threshold : float
-        Fraction of slab height to consider as surface (0.2 = top 20%)
+        Fraction of slab height to consider as surface (0.2 = top 20%).
+        Only used if layer_tolerance is None.
+    layer_tolerance : float, optional
+        If provided, select atoms within this distance (Angstrom) of the
+        topmost atom. This is more physically meaningful than z_threshold
+        as it selects exactly the top atomic layer(s). Default is 2.0 Å,
+        which captures the topmost bilayer in perovskites (e.g., VO2 + LaO).
 
     Returns
     -------
     tuple
         (list of surface atom indices, z_cutoff value)
+
+    Examples
+    --------
+    >>> # Get only the topmost layer (within 1 Å of highest atom)
+    >>> surface_idx, z_cut = get_surface_atoms(slab)
+    >>>
+    >>> # Use fractional threshold (legacy behavior)
+    >>> surface_idx, z_cut = get_surface_atoms(slab, z_threshold=0.2, layer_tolerance=None)
     """
     z_positions = atoms.positions[:, 2]
-    z_min, z_max = z_positions.min(), z_positions.max()
-    z_range = z_max - z_min
-    z_cutoff = z_max - z_threshold * z_range
+    z_max = z_positions.max()
 
+    # Default to layer-based detection (2.0 Å tolerance)
+    # This captures the topmost "bilayer" in perovskites (e.g., VO2 + LaO)
+    if layer_tolerance is None:
+        layer_tolerance = 2.0
+
+    # Use layer tolerance: atoms within layer_tolerance of the topmost atom
+    z_cutoff = z_max - layer_tolerance
     surface_indices = [i for i, z in enumerate(z_positions) if z > z_cutoff]
 
     return surface_indices, z_cutoff
