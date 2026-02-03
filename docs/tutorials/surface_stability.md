@@ -187,30 +187,28 @@ print("="*60)
 
 ## Step 6: Visualize Results
 
+Use the built-in plotting function:
+
 ```python
-import matplotlib.pyplot as plt
+from nh3sofc.analysis import plot_surface_stability
 
-# Bar chart of surface energies
-fig, ax = plt.subplots(figsize=(8, 5))
+# Collect surface energies
+energies = {miller: data['gamma_J_m2'] for miller, data in results.items()}
 
-millers = [m for m, _ in ranked]
-gammas = [d['gamma_J_m2'] for _, d in ranked]
-colors = plt.cm.RdYlGn_r([i/len(millers) for i in range(len(millers))])
+# Plot (sorted by stability automatically)
+fig, ax = plot_surface_stability(
+    energies,
+    title="CeO2 Surface Stability",
+    filename="surface_stability.png"
+)
 
-bars = ax.bar(millers, gammas, color=colors, edgecolor='black')
-ax.set_xlabel('Surface', fontsize=12)
-ax.set_ylabel('Surface Energy (J/m²)', fontsize=12)
-ax.set_title('CeO2 Surface Stability', fontsize=14)
-
-# Add values on bars
-for bar, gamma in zip(bars, gammas):
-    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.05,
-            f'{gamma:.2f}', ha='center', va='bottom', fontsize=10)
-
-plt.tight_layout()
-plt.savefig('surface_stability.png', dpi=150)
-print("Saved: surface_stability.png")
+# Output: Bar chart with green (stable) to red (unstable) colors
 ```
+
+The plot shows:
+- Bars sorted by stability (most stable on left)
+- Color gradient: green (stable) → red (unstable)
+- Energy values labeled on each bar
 
 ## Handling Special Cases
 

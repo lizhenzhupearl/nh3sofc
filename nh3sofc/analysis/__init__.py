@@ -15,6 +15,7 @@ from .energetics import (
     BindingEnergyAnalyzer,
     calculate_adsorption_energy,
     calculate_coverage_dependent_energy,
+    plot_surface_stability,
 )
 from .thermochemistry import (
     HarmonicThermo,
@@ -62,6 +63,7 @@ __all__ = [
     "SurfaceEnergyCalculator",
     "DecompositionEnergetics",
     "BindingEnergyAnalyzer",
+    "plot_surface_stability",
     "calculate_adsorption_energy",
     "calculate_coverage_dependent_energy",
     # Thermochemistry

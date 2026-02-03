@@ -205,6 +205,82 @@ class SurfaceEnergyCalculator:
         return gamma_ev_a2 * 16.0218
 
 
+def plot_surface_stability(
+    surface_energies: Dict[str, float],
+    title: str = "Surface Stability",
+    filename: Optional[str] = None,
+    unit: str = "J/m²",
+    figsize: Tuple[float, float] = (8, 5),
+) -> Tuple:
+    """
+    Plot surface energies as a bar chart to compare stability.
+
+    Lower surface energy = more thermodynamically stable.
+
+    Parameters
+    ----------
+    surface_energies : dict
+        Surface energies by Miller index, e.g., {"111": 0.8, "110": 1.2}
+    title : str
+        Plot title
+    filename : str, optional
+        Save figure to file if provided
+    unit : str
+        Energy unit for y-axis label
+    figsize : tuple
+        Figure size (width, height)
+
+    Returns
+    -------
+    tuple
+        (fig, ax) matplotlib objects
+
+    Examples
+    --------
+    >>> energies = {"111": 0.85, "110": 1.25, "100": 2.05}
+    >>> fig, ax = plot_surface_stability(energies, title="CeO2 Surface Stability")
+    """
+    import matplotlib.pyplot as plt
+
+    # Sort by surface energy (most stable first)
+    sorted_data = sorted(surface_energies.items(), key=lambda x: x[1])
+    millers = [f"({m})" for m, _ in sorted_data]
+    gammas = [g for _, g in sorted_data]
+
+    # Color gradient: green (stable) to red (unstable)
+    colors = plt.cm.RdYlGn_r(np.linspace(0.2, 0.8, len(millers)))
+
+    fig, ax = plt.subplots(figsize=figsize)
+    bars = ax.bar(millers, gammas, color=colors, edgecolor='black', linewidth=1.2)
+
+    # Add value labels on bars
+    for bar, gamma in zip(bars, gammas):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2, height + 0.05 * max(gammas),
+                f'{gamma:.2f}', ha='center', va='bottom', fontsize=11, fontweight='bold')
+
+    ax.set_xlabel('Surface', fontsize=12)
+    ax.set_ylabel(f'Surface Energy ({unit})', fontsize=12)
+    ax.set_title(title, fontsize=14, fontweight='bold')
+
+    # Add stability annotation
+    ax.annotate('← More stable', xy=(0, 0), xytext=(0.02, 0.98),
+                xycoords='axes fraction', fontsize=10, color='green',
+                ha='left', va='top')
+
+    ax.set_ylim(0, max(gammas) * 1.25)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    plt.tight_layout()
+
+    if filename:
+        plt.savefig(filename, dpi=150, bbox_inches='tight')
+        print(f"Saved: {filename}")
+
+    return fig, ax
+
+
 class DecompositionEnergetics:
     """
     Analyze energetics of NH3 decomposition pathway.
