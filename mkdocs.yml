@@ -83,6 +83,7 @@ nav:
   - Tutorials:
     - Overview: tutorials/index.md
     - Surface Building: tutorials/surface_building.md
+    - Surface Stability: tutorials/surface_stability.md
     - Adsorbate Placement: tutorials/adsorbate_placement.md
     - VASP Calculations: tutorials/vasp_calculations.md
     - NH3 Decomposition: tutorials/decomposition.md
