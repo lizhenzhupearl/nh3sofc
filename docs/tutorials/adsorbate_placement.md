@@ -189,18 +189,26 @@ configs = placer.add_catkit(
 
 ## Filtering Configurations
 
-Remove duplicate configurations based on RMSD:
+Remove duplicate configurations based on **adsorbate-only RMSD**:
 
 ```python
 from nh3sofc.structure.adsorbates import filter_unique_configs, save_configs
 
-# Remove similar configurations (RMSD < 0.5 Å)
-unique_configs = filter_unique_configs(configs, threshold=0.5)
+# Remove similar configurations (RMSD < 0.5 Å on adsorbate atoms only)
+unique_configs = filter_unique_configs(
+    configs,
+    threshold=0.5,
+    n_slab_atoms=len(surface)  # Important: specify slab size
+)
 print(f"Filtered {len(configs)} → {len(unique_configs)} unique")
 
 # Save to files
 paths = save_configs(unique_configs, output_dir="./configs", format="vasp")
 ```
+
+**Note:** The filter compares only the adsorbate atoms, not the entire structure.
+This prevents the large slab from dominating the RMSD calculation, which would
+incorrectly mark most configurations as duplicates.
 
 ## Getting Site Information
 
@@ -223,6 +231,7 @@ from nh3sofc.structure.adsorbates import filter_unique_configs, save_configs
 
 # Load surface
 surface = read("work/surfaces/LaVO3_001/surface.vasp", format="vasp")
+n_slab_atoms = len(surface)  # Remember slab size for filtering
 placer = AdsorbatePlacer(surface)
 
 # Check available sites
@@ -238,8 +247,8 @@ configs = placer.add_on_site(
 )
 print(f"Generated: {len(configs)} configurations")
 
-# Filter duplicates
-unique = filter_unique_configs(configs, threshold=0.5)
+# Filter duplicates (adsorbate-only RMSD)
+unique = filter_unique_configs(configs, threshold=0.5, n_slab_atoms=n_slab_atoms)
 print(f"Unique: {len(unique)} configurations")
 
 # Save for VASP calculations

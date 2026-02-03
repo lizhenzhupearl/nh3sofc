@@ -788,45 +788,95 @@ class AdsorbatePlacer:
 def filter_unique_configs(
     configs: List[Atoms],
     threshold: float = 0.5,
+    n_slab_atoms: Optional[int] = None,
 ) -> List[Atoms]:
     """
-    Filter configurations to remove duplicates based on RMSD.
+    Filter configurations to remove duplicates based on adsorbate RMSD.
+
+    Compares only the adsorbate atoms (not the slab) to determine uniqueness.
+    This prevents the slab atoms from dominating the RMSD calculation.
 
     Parameters
     ----------
     configs : list
-        List of Atoms objects
+        List of Atoms objects (slab + adsorbate)
     threshold : float
-        RMSD threshold for considering structures as duplicates
+        RMSD threshold for considering adsorbates as duplicates.
+        Default 0.5 Å works well for most adsorbates.
+    n_slab_atoms : int, optional
+        Number of atoms in the slab. If not provided, it's inferred by
+        finding the common atom count prefix across all configs.
 
     Returns
     -------
     list
         Filtered list of unique configurations
-    """
-    from ..core.base import calculate_rmsd
 
+    Examples
+    --------
+    >>> # Filter configs generated from a 100-atom slab
+    >>> unique = filter_unique_configs(configs, threshold=0.5, n_slab_atoms=100)
+    """
     if not configs:
         return []
+
+    if len(configs) == 1:
+        return configs
+
+    # Infer n_slab_atoms if not provided
+    if n_slab_atoms is None:
+        # Assume all configs have same slab, find minimum atom count
+        # and check if positions match for those atoms
+        min_atoms = min(len(c) for c in configs)
+        # Use the first config's non-adsorbate atoms as reference
+        # Heuristic: slab atoms are all atoms except the last few
+        # Try to detect by checking which atoms have identical positions
+        ref_positions = configs[0].positions
+        for n in range(min_atoms, 0, -1):
+            all_match = True
+            for config in configs[1:]:
+                if not np.allclose(ref_positions[:n], config.positions[:n], atol=0.01):
+                    all_match = False
+                    break
+            if all_match:
+                n_slab_atoms = n
+                break
+        else:
+            # Fallback: assume last 4-10 atoms are adsorbate
+            n_slab_atoms = min_atoms - 4
+            print(f"Warning: Could not infer n_slab_atoms, assuming {n_slab_atoms}")
+
+    def get_adsorbate_positions(config: Atoms) -> np.ndarray:
+        """Extract adsorbate positions (atoms after slab)."""
+        return config.positions[n_slab_atoms:]
+
+    def adsorbate_rmsd(config1: Atoms, config2: Atoms) -> float:
+        """Calculate RMSD of adsorbate atoms only."""
+        pos1 = get_adsorbate_positions(config1)
+        pos2 = get_adsorbate_positions(config2)
+
+        if len(pos1) != len(pos2):
+            return float('inf')
+
+        diff = pos1 - pos2
+        return np.sqrt(np.mean(np.sum(diff**2, axis=1)))
 
     unique = [configs[0]]
 
     for config in configs[1:]:
         is_unique = True
         for existing in unique:
-            try:
-                rmsd = calculate_rmsd(config, existing)
-                if rmsd < threshold:
-                    is_unique = False
-                    break
-            except ValueError:
-                # Different number of atoms
-                continue
+            rmsd = adsorbate_rmsd(config, existing)
+            if rmsd < threshold:
+                is_unique = False
+                break
 
         if is_unique:
             unique.append(config)
 
-    print(f"Filtered {len(configs)} configs to {len(unique)} unique")
+    n_adsorbate = len(configs[0]) - n_slab_atoms
+    print(f"Filtered {len(configs)} configs to {len(unique)} unique "
+          f"(compared {n_adsorbate} adsorbate atoms, threshold={threshold} Å)")
     return unique
 
 

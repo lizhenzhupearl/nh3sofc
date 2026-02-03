@@ -801,6 +801,60 @@ class TestAdsorbateRotationConsistency:
             f"Rotation should vary in all dimensions, got variance: {variance}"
 
 
+class TestFilterUniqueConfigsAdsorbateOnly:
+    """
+    Bug: filter_unique_configs calculated RMSD on the entire structure
+    (slab + adsorbate), causing the slab atoms to dominate. With 100 slab
+    atoms and 4 adsorbate atoms, even very different adsorbate positions
+    resulted in small RMSD, filtering out most configs.
+
+    Fix: filter_unique_configs now compares only the adsorbate atoms,
+    not the slab atoms.
+
+    Date fixed: 2026-02-02
+    """
+
+    def test_filter_preserves_different_positions(self, simple_slab):
+        """Configs with different adsorbate positions should be kept."""
+        from nh3sofc.structure import AdsorbatePlacer
+        from nh3sofc.structure.adsorbates import filter_unique_configs
+
+        n_slab = len(simple_slab)
+        placer = AdsorbatePlacer(simple_slab)
+
+        # Generate configs at different random positions
+        configs = placer.add_with_collision(
+            "NH3", n_configs=20, min_distance=2.0, random_seed=42
+        )
+
+        # Filter should keep most of them (different positions)
+        unique = filter_unique_configs(configs, threshold=0.5, n_slab_atoms=n_slab)
+
+        # Should keep at least 50% (not 2-3 like the old bug)
+        assert len(unique) >= len(configs) * 0.5, \
+            f"Too many configs filtered: {len(configs)} -> {len(unique)}"
+
+    def test_filter_removes_similar_orientations(self, simple_slab):
+        """Configs at same position with similar orientations should be filtered."""
+        from nh3sofc.structure import AdsorbatePlacer
+        from nh3sofc.structure.adsorbates import filter_unique_configs
+
+        n_slab = len(simple_slab)
+        placer = AdsorbatePlacer(simple_slab)
+
+        # Generate many orientations at same site - many should be similar
+        configs = placer.add_on_site(
+            "NH3", atom_types=["Pt"], n_orientations=50, random_seed=42
+        )
+
+        # Filter should remove some duplicates
+        unique = filter_unique_configs(configs, threshold=0.5, n_slab_atoms=n_slab)
+
+        # Should filter some but not all
+        assert len(unique) < len(configs), "Should filter some similar orientations"
+        assert len(unique) > 1, "Should keep more than 1 config"
+
+
 class TestAddOnSiteSurfaceValidation:
     """
     Bug: add_on_site() with site_indices would place adsorbates on any
