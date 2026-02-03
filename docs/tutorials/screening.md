@@ -210,18 +210,23 @@ configs_b = placer.add_random("NH3", n_configs=10, random_seed=42)
 
 #### Filtering Unique Configurations
 
-After generating many configurations, filter duplicates:
+After generating many configurations, filter duplicates based on **adsorbate-only RMSD**:
 
 ```python
 from nh3sofc.structure.adsorbates import filter_unique_configs, save_configs
 
-# Remove duplicates based on RMSD
-unique = filter_unique_configs(configs, threshold=0.5)
+# Remove duplicates (compares only adsorbate atoms, not the slab)
+n_slab_atoms = len(slab.atoms)  # Number of atoms in the original slab
+unique = filter_unique_configs(configs, threshold=0.5, n_slab_atoms=n_slab_atoms)
 print(f"Filtered {len(configs)} → {len(unique)} unique configurations")
 
 # Save for calculations
 paths = save_configs(unique, output_dir="./adsorbate_configs", format="vasp")
 ```
+
+**Important:** The `n_slab_atoms` parameter tells the filter where the adsorbate
+atoms start. Without it, the large slab would dominate the RMSD calculation,
+incorrectly marking most configurations as duplicates.
 
 ## Visualizing Results
 
