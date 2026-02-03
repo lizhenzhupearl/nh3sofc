@@ -801,11 +801,13 @@ def filter_unique_configs(
     configs : list
         List of Atoms objects (slab + adsorbate)
     threshold : float
-        RMSD threshold for considering adsorbates as duplicates.
+        RMSD threshold in Angstroms for considering adsorbates as duplicates.
         Default 0.5 Å works well for most adsorbates.
     n_slab_atoms : int, optional
-        Number of atoms in the slab. If not provided, it's inferred by
-        finding the common atom count prefix across all configs.
+        Number of atoms in the original slab (before adsorbate was added).
+        Adsorbate atoms are assumed to be at indices n_slab_atoms onwards.
+        If not provided, it's inferred by finding atoms with identical
+        positions across all configs.
 
     Returns
     -------

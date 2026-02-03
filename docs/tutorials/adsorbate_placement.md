@@ -197,8 +197,8 @@ from nh3sofc.structure.adsorbates import filter_unique_configs, save_configs
 # Remove similar configurations (RMSD < 0.5 Å on adsorbate atoms only)
 unique_configs = filter_unique_configs(
     configs,
-    threshold=0.5,
-    n_slab_atoms=len(surface)  # Important: specify slab size
+    threshold=0.5,        # RMSD threshold in Angstroms
+    n_slab_atoms=len(surface)  # Number of atoms in the original slab
 )
 print(f"Filtered {len(configs)} → {len(unique_configs)} unique")
 
@@ -206,9 +206,17 @@ print(f"Filtered {len(configs)} → {len(unique_configs)} unique")
 paths = save_configs(unique_configs, output_dir="./configs", format="vasp")
 ```
 
-**Note:** The filter compares only the adsorbate atoms, not the entire structure.
-This prevents the large slab from dominating the RMSD calculation, which would
-incorrectly mark most configurations as duplicates.
+### Why `n_slab_atoms`?
+
+When adsorbates are added, they are appended to the end of the atom list:
+
+```
+Structure: [slab_0, slab_1, ..., slab_N-1, adsorbate_0, adsorbate_1, ...]
+            |<------ slab (N atoms) ----->|<---- adsorbate (M atoms) --->|
+```
+
+The `n_slab_atoms` parameter tells the filter where the adsorbate atoms start,
+so it only compares those atoms (not the identical slab atoms).
 
 ## Getting Site Information
 
