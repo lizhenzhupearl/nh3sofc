@@ -5,7 +5,7 @@ This tutorial covers 6 different methods for placing adsorbate molecules on surf
 ## Learning Objectives
 
 - Understand the 6 adsorbate placement methods
-- Generate multiple adsorption configurations
+- Generate multiple adsorption configurations with proper rotation sampling
 - Filter and select configurations for calculations
 
 ## The 6 Placement Methods
@@ -15,9 +15,9 @@ This tutorial covers 6 different methods for placing adsorbate molecules on surf
 | `add_simple()` | Manual placement at known position |
 | `add_random()` | Exploratory sampling |
 | `add_grid()` | Systematic coverage |
-| `add_on_site()` | Specific atomic sites |
+| `add_on_site()` | Specific atomic sites (most physically meaningful) |
 | `add_with_collision()` | Safe random placement |
-| `add_catkit()` | Automated site detection |
+| `add_catkit()` | Automated site detection via CatKit |
 
 ## Setup
 
@@ -32,9 +32,27 @@ surface = read("work/surfaces/LaVO3_001/surface.vasp", format="vasp")
 placer = AdsorbatePlacer(surface)
 ```
 
+## Rotation Sampling
+
+All placement methods (except `add_simple()`) apply **uniform random rotations on SO(3)**
+for unbiased molecular orientations. This uses proper spherical sampling:
+
+```python
+# Internally, rotations use: β = arccos(1 - 2u) for uniform coverage
+# This avoids clustering near the "poles" that occurs with naive sampling
+```
+
+For reproducibility, always set `random_seed`:
+
+```python
+configs_a = placer.add_random("NH3", n_configs=10, random_seed=42)
+configs_b = placer.add_random("NH3", n_configs=10, random_seed=42)
+# configs_a and configs_b are identical
+```
+
 ## Method 1: Simple (Manual)
 
-Place at specific (x, y) coordinates.
+Place at specific (x, y) coordinates with optional rotation.
 
 ```python
 # Place NH3 at position (2.5, 2.5) Å, 2.0 Å above surface
@@ -48,7 +66,7 @@ result = placer.add_simple(
 
 ## Method 2: Random
 
-Generate random configurations with rotation.
+Generate random configurations with uniform rotation sampling.
 
 ```python
 # Generate 10 random configurations
@@ -64,41 +82,50 @@ print(f"Generated {len(configs)} configurations")
 
 ## Method 3: Grid
 
-Systematic grid-based placement.
+Systematic grid-based placement with multiple orientations per point.
 
 ```python
-# 3x3 grid of positions
+# 3x3 grid with 4 orientations per point
 configs = placer.add_grid(
     adsorbate="NH3",
     grid_size=(3, 3),
-    orientations=1,  # One orientation per grid point
-    height=2.0
+    orientations=4,   # 4 random orientations per grid point
+    height=2.0,
+    random_seed=42
 )
-# Returns 9 configurations
+# Returns 3 × 3 × 4 = 36 configurations
 ```
 
 ## Method 4: On-Site (Atomic Sites)
 
-Place on specific atomic sites (ontop, bridge, hollow).
+Place on specific atomic sites. This is the **most physically meaningful** method.
+
+**Important:** Only atoms in the **top bilayer** (within `layer_tolerance` of the
+topmost atom) are considered as surface sites. Bulk atoms are automatically excluded.
 
 ```python
-# On top of La atoms only
-configs = placer.add_on_site(
-    adsorbate="NH3",
-    site_type="ontop",
-    atom_types=["La"],
-    height=2.0
-)
-
-# On top of all metal atoms
+# On top of La and V atoms in the surface bilayer
 configs = placer.add_on_site(
     adsorbate="NH3",
     site_type="ontop",
     atom_types=["La", "V"],
-    height=2.0
+    n_orientations=5,     # 5 orientations per site
+    height=2.0,
+    layer_tolerance=2.0,  # Top 2 Å = surface bilayer (default)
+    random_seed=42
 )
 
-# Bridge sites between O atoms
+# For only the topmost layer (e.g., VO2 termination only)
+configs = placer.add_on_site(
+    adsorbate="NH3",
+    site_type="ontop",
+    atom_types=["V"],
+    n_orientations=3,
+    layer_tolerance=1.0,  # Only topmost ~1 Å
+    random_seed=42
+)
+
+# Bridge sites (requires CatKit or uses geometric approximation)
 configs = placer.add_on_site(
     adsorbate="H",
     site_type="bridge",
@@ -106,6 +133,16 @@ configs = placer.add_on_site(
     height=1.0
 )
 ```
+
+### Surface Detection
+
+The `layer_tolerance` parameter controls which atoms are considered "on the surface":
+
+| `layer_tolerance` | Effect |
+|-------------------|--------|
+| 1.0 Å | Topmost atomic layer only |
+| 2.0 Å (default) | Top bilayer (e.g., VO2 + LaO in perovskites) |
+| 3.0 Å | Top 2-3 layers |
 
 ## Method 5: Collision-Aware
 
@@ -117,19 +154,22 @@ configs = placer.add_with_collision(
     adsorbate="NH3",
     n_configs=10,
     min_distance=2.0,
-    height=2.0
+    height=2.0,
+    random_seed=42
 )
 ```
 
 ## Method 6: CatKit Integration
 
-Use CatKit for automated site detection.
+Use CatKit for automated site detection with rotation support.
 
 ```python
-# Requires catkit installation
+# Requires catkit installation: pip install catkit
 configs = placer.add_catkit(
     adsorbate="NH3",
-    site_type="ontop"  # or "bridge", "hollow"
+    site_type="ontop",      # or "bridge", "hollow", "4fold"
+    n_orientations=3,       # 3 orientations per site
+    random_seed=42
 )
 ```
 
@@ -137,28 +177,41 @@ configs = placer.add_catkit(
 
 | Name | Formula | Default Height |
 |------|---------|----------------|
-| `"NH3"` | NH3 | 2.0 Å |
-| `"NH2"` | NH2 | 1.8 Å |
+| `"NH3"` | NH₃ | 2.0 Å |
+| `"NH2"` | NH₂ | 1.8 Å |
 | `"NH"` | NH | 1.5 Å |
 | `"N"` | N | 1.2 Å |
 | `"H"` | H | 1.0 Å |
-| `"H2"` | H2 | 2.5 Å |
-| `"H2O"` | H2O | 2.0 Å |
+| `"H2"` | H₂ | 2.5 Å |
+| `"H2O"` | H₂O | 2.0 Å |
 | `"O"` | O | 1.2 Å |
 | `"OH"` | OH | 1.5 Å |
 
 ## Filtering Configurations
 
+Remove duplicate configurations based on RMSD:
+
 ```python
-from nh3sofc.structure import filter_by_rmsd
+from nh3sofc.structure.adsorbates import filter_unique_configs, save_configs
 
-# Remove similar configurations
-unique_configs = filter_by_rmsd(
-    configs,
-    threshold=0.5  # Å
-)
+# Remove similar configurations (RMSD < 0.5 Å)
+unique_configs = filter_unique_configs(configs, threshold=0.5)
+print(f"Filtered {len(configs)} → {len(unique_configs)} unique")
 
-print(f"Unique configurations: {len(unique_configs)}")
+# Save to files
+paths = save_configs(unique_configs, output_dir="./configs", format="vasp")
+```
+
+## Getting Site Information
+
+Inspect available adsorption sites before placement:
+
+```python
+info = placer.get_site_info(layer_tolerance=2.0)
+
+print(f"Surface atoms: {info['n_surface_atoms']}")
+print(f"By element: {info['element_counts']}")
+# Output: {'La': 1, 'V': 1, 'O': 3}
 ```
 
 ## Complete Example
@@ -166,32 +219,31 @@ print(f"Unique configurations: {len(unique_configs)}")
 ```python
 from ase.io import read
 from nh3sofc.structure import AdsorbatePlacer
-from nh3sofc import save_configurations
+from nh3sofc.structure.adsorbates import filter_unique_configs, save_configs
 
-# Load surface (from previous surface building step)
+# Load surface
 surface = read("work/surfaces/LaVO3_001/surface.vasp", format="vasp")
-
-# Create placer
 placer = AdsorbatePlacer(surface)
 
-# Method 1: On top of La atoms
-la_configs = placer.add_on_site("NH3", site_type="ontop", atom_types=["La"])
+# Check available sites
+info = placer.get_site_info()
+print(f"Surface sites: {info['element_counts']}")
 
-# Method 2: On top of V atoms
-v_configs = placer.add_on_site("NH3", site_type="ontop", atom_types=["V"])
+# Generate configurations on La and V sites
+configs = placer.add_on_site(
+    "NH3",
+    atom_types=["La", "V"],
+    n_orientations=5,
+    random_seed=42
+)
+print(f"Generated: {len(configs)} configurations")
 
-# Combine all configs
-all_configs = la_configs + v_configs
+# Filter duplicates
+unique = filter_unique_configs(configs, threshold=0.5)
+print(f"Unique: {len(unique)} configurations")
 
-# Option 1: Auto-generate work directory (creates folder like "work/slab_H3La8N1V8O24_44atoms/")
-result = save_configurations(all_configs, name_prefix="config", prefix="NH3_adsorption")
-print(f"Saved to: {result['work_dir']}")
-
-# Option 2: Specify work directory explicitly
-result = save_configurations(all_configs, "work/adsorbates/NH3_on_LaVO3_001", name_prefix="config")
-
-print(f"Generated {len(all_configs)} configurations")
-# Creates: config_001.vasp, config_002.vasp, ...
+# Save for VASP calculations
+paths = save_configs(unique, "work/adsorbates/NH3_on_LaVO3", format="vasp")
 ```
 
 ## Next Steps
