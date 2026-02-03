@@ -10,6 +10,7 @@ from datetime import datetime
 import numpy as np
 from ase import Atoms
 from ase.io import write as ase_write
+from ase.constraints import FixAtoms
 
 
 def generate_work_dir(
@@ -83,6 +84,8 @@ def sort_atoms_by_element(atoms: Atoms) -> Atoms:
     """
     Sort atoms by chemical symbol (alphabetically).
 
+    Properly remaps FixAtoms constraints to new indices.
+
     Parameters
     ----------
     atoms : Atoms
@@ -104,7 +107,28 @@ def sort_atoms_by_element(atoms: Atoms) -> Atoms:
         for i, s in enumerate(symbols):
             if s == sym:
                 sort_indices.append(i)
-    return atoms[sort_indices]
+
+    # Create mapping from old indices to new indices
+    old_to_new = {old_idx: new_idx for new_idx, old_idx in enumerate(sort_indices)}
+
+    # Get constraints before sorting
+    old_constraints = atoms.constraints
+
+    # Sort atoms (this loses constraints)
+    sorted_atoms = atoms[sort_indices]
+
+    # Remap and restore FixAtoms constraints
+    new_constraints = []
+    for constraint in old_constraints:
+        if isinstance(constraint, FixAtoms):
+            # Remap indices
+            new_indices = [old_to_new[i] for i in constraint.index if i in old_to_new]
+            if new_indices:
+                new_constraints.append(FixAtoms(indices=new_indices))
+
+    sorted_atoms.set_constraint(new_constraints)
+
+    return sorted_atoms
 
 
 def write_poscar(
@@ -200,7 +224,19 @@ def write_poscar(
     # Line 7: Element counts
     lines.append("  " + "  ".join(str(c) for c in element_counts))
 
-    # Line 8: Coordinate type
+    # Check for FixAtoms constraints
+    fixed_indices = set()
+    for constraint in atoms.constraints:
+        if isinstance(constraint, FixAtoms):
+            fixed_indices.update(constraint.index)
+
+    has_selective = len(fixed_indices) > 0
+
+    # Line 8: Selective dynamics (if needed)
+    if has_selective:
+        lines.append("Selective dynamics")
+
+    # Line 9: Coordinate type
     if direct:
         lines.append("Direct")
         positions = atoms.get_scaled_positions()
@@ -208,9 +244,15 @@ def write_poscar(
         lines.append("Cartesian")
         positions = atoms.get_positions()
 
-    # Remaining lines: Coordinates
-    for pos in positions:
-        lines.append(f"  {pos[0]:19.16f}  {pos[1]:19.16f}  {pos[2]:19.16f}")
+    # Remaining lines: Coordinates with selective dynamics flags
+    for i, pos in enumerate(positions):
+        coord_line = f"  {pos[0]:19.16f}  {pos[1]:19.16f}  {pos[2]:19.16f}"
+        if has_selective:
+            if i in fixed_indices:
+                coord_line += "   F   F   F"
+            else:
+                coord_line += "   T   T   T"
+        lines.append(coord_line)
 
     # Write to file
     with open(filepath, "w") as f:
