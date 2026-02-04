@@ -30,6 +30,7 @@ Step-by-step guides for common workflows in NH3-SOFC research.
 
 | Tutorial | Description | Time |
 |----------|-------------|------|
+| [Doped Ceria (GDC/SDC/PDC)](doped_ceria.md) | Acceptor-doped ceria with O vacancies | 25 min |
 | [Exsolution Simulation](exsolution.md) | Metal nanoparticle exsolution from perovskites | 35 min |
 | [High-Throughput Screening](screening.md) | Systematic parameter scans | 30 min |
 | [MACE ML Force Fields](mace.md) | Training and active learning | 40 min |

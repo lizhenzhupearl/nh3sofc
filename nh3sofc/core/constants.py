@@ -248,3 +248,28 @@ DEFAULT_EXSOLUTION_PARAMS = {
     "vacancy_coupling": 2,      # O vacancies per reduced B-site
     "socket_depth": 1.0,        # A, particle embedding depth
 }
+
+# Acceptor dopant properties for CeO2 (GDC, SDC, PDC, etc.)
+# Ionic radii in Angstroms for 8-coordinate sites (Shannon radii)
+ACCEPTOR_DOPANTS = {
+    "Sm": {"charge": +3, "ionic_radius": 1.079, "name": "Samarium"},
+    "Gd": {"charge": +3, "ionic_radius": 1.053, "name": "Gadolinium"},
+    "Pr": {"charge": +3, "ionic_radius": 1.126, "name": "Praseodymium"},
+    "Y":  {"charge": +3, "ionic_radius": 1.019, "name": "Yttrium"},
+    "La": {"charge": +3, "ionic_radius": 1.160, "name": "Lanthanum"},
+    "Nd": {"charge": +3, "ionic_radius": 1.109, "name": "Neodymium"},
+}
+
+# Host cation properties (8-coordinate ionic radii)
+HOST_CATIONS = {
+    "Ce": {"charge": +4, "ionic_radius": 0.970},
+    "Zr": {"charge": +4, "ionic_radius": 0.840},
+}
+
+# Charge compensation ratios for acceptor doping
+# Maps dopant charge to (n_dopants, n_vacancies) for charge neutrality
+# For trivalent dopants in tetravalent host: 2 M³⁺ + V_O^{2+} → net neutral
+CHARGE_COMPENSATION = {
+    3: (2, 1),  # 2 M³⁺ + 1 V_O^{2+} → net neutral (e.g., Gd³⁺ in Ce⁴⁺)
+    2: (1, 1),  # 1 M²⁺ + 1 V_O^{2+} → net neutral (for divalent dopants)
+}

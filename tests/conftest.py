@@ -53,3 +53,25 @@ def mixed_element_slab():
         pbc=True
     )
     return atoms
+
+
+@pytest.fixture
+def ceo2_slab():
+    """Create a CeO2 slab-like structure for dopant testing.
+
+    Creates a 2x2x2 fluorite supercell with vacuum to mimic a slab.
+    Contains 8 Ce and 16 O atoms.
+    """
+    # Start with CeO2 bulk
+    ceo2 = bulk('CeO2', 'fluorite', a=5.41)
+    # Create 2x2x2 supercell
+    supercell = ceo2 * (2, 2, 2)
+    # Add vacuum in z-direction to make it slab-like
+    cell = supercell.cell.copy()
+    cell[2, 2] += 15.0  # Add 15 A vacuum
+    supercell.set_cell(cell)
+    # Shift atoms to center in z
+    positions = supercell.get_positions()
+    positions[:, 2] += 7.5
+    supercell.set_positions(positions)
+    return supercell

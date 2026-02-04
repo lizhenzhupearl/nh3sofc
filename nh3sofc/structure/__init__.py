@@ -27,6 +27,13 @@ from .exsolution import (
     generate_exsolution_series,
     create_metallic_cluster,
 )
+from .dopants import (
+    DopantBuilder,
+    DopedCeriaStructure,
+    analyze_dopant_distribution,
+    generate_dopant_series,
+    print_dopant_analysis,
+)
 
 __all__ = [
     # Bulk
@@ -56,4 +63,10 @@ __all__ = [
     "ExsolutionStructure",
     "generate_exsolution_series",
     "create_metallic_cluster",
+    # Dopants
+    "DopantBuilder",
+    "DopedCeriaStructure",
+    "analyze_dopant_distribution",
+    "generate_dopant_series",
+    "print_dopant_analysis",
 ]

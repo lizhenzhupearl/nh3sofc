@@ -67,6 +67,7 @@
 | Material Class | Examples | Focus |
 |---------------|----------|-------|
 | Perovskite Oxynitrides | LaVON₂₋ₓ, LaVO₃ | Primary research target |
+| Doped Ceria | GDC, SDC, PDC (Ce₁₋ₓMₓO₂₋δ) | Ionic conductors with O vacancies |
 | Exsolution Perovskites | La₀.₄Sr₀.₄Ti₀.₉Ni₀.₁O₃, Ni/GDC | Metal nanoparticle catalysis |
 | Mixed Ion Conductors | LSGM, BCZY | Proton/oxide conductors |
 | Cermet Anodes | Ni/YSZ, Ni/GDC | Benchmark materials |

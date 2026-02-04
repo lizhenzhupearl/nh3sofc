@@ -880,3 +880,359 @@ series = generate_exsolution_series(
     n_configs=3
 )
 ```
+
+---
+
+## DopantBuilder
+
+Create acceptor-doped ceria structures (GDC, SDC, PDC) with charge-compensating oxygen vacancies.
+
+```python
+from nh3sofc.structure import DopantBuilder
+```
+
+### Constructor
+
+```python
+DopantBuilder(structure: Union[SlabStructure, Atoms])
+```
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `structure` | `SlabStructure` or `Atoms` | CeO2 structure (bulk or slab) to dope |
+
+### Methods
+
+#### create_doped_structure
+
+```python
+create_doped_structure(
+    dopant: str,
+    dopant_fraction: float,
+    host_cation: str = "Ce",
+    auto_compensate: bool = True,
+    vacancy_placement: str = "random",
+    dopant_placement: str = "random",
+    dopant_preference: float = 0.7,
+    vacancy_preference: float = 0.7,
+    pr_trivalent_fraction: float = 1.0,
+    z_threshold: float = 0.3,
+    random_seed: int = None
+) -> Atoms
+```
+
+Create doped structure with charge-compensating vacancies.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `dopant` | `str` | - | Dopant element ("Sm", "Gd", "Pr", "Y", "La", "Nd") |
+| `dopant_fraction` | `float` | - | Fraction of host cations to replace (0.0 to 1.0) |
+| `host_cation` | `str` | `"Ce"` | Cation to replace |
+| `auto_compensate` | `bool` | `True` | Create compensating vacancies automatically |
+| `vacancy_placement` | `str` | `"random"` | Vacancy placement strategy (see below) |
+| `dopant_placement` | `str` | `"random"` | Dopant placement strategy |
+| `dopant_preference` | `float` | `0.7` | Bias strength for dopant placement (0.5=uniform, 1.0=strong) |
+| `vacancy_preference` | `float` | `0.7` | Bias strength for vacancy placement |
+| `pr_trivalent_fraction` | `float` | `1.0` | For Pr: fraction that is Pr³⁺ (rest is Pr⁴⁺) |
+| `z_threshold` | `float` | `0.3` | Fraction of slab considered "surface" |
+| `random_seed` | `int` | `None` | Random seed for reproducibility |
+
+**Placement strategies:**
+
+| Strategy | Description |
+|----------|-------------|
+| `"random"` | Uniform random distribution (ignores preference) |
+| `"surface"` | Preferentially place at high z (surface) |
+| `"bulk"` | Preferentially place at low z (bulk) |
+| `"near_dopant"` | Place vacancies near dopant atoms (vacancy only) |
+
+**Example:**
+
+```python
+builder = DopantBuilder(ceo2_slab)
+
+# 10% Gd-doped ceria (GDC) with random placement
+gdc = builder.create_doped_structure(
+    dopant="Gd",
+    dopant_fraction=0.10,
+)
+
+# GDC with vacancies preferring dopant sites
+gdc_associated = builder.create_doped_structure(
+    dopant="Gd",
+    dopant_fraction=0.10,
+    vacancy_placement="near_dopant",
+    vacancy_preference=0.8,
+)
+
+# Pr-doped ceria with mixed valence
+pdc = builder.create_doped_structure(
+    dopant="Pr",
+    dopant_fraction=0.20,
+    pr_trivalent_fraction=0.5,  # 50% Pr³⁺, 50% Pr⁴⁺
+)
+```
+
+#### create_doped_pool
+
+```python
+create_doped_pool(
+    dopant: str,
+    dopant_fraction: float,
+    n_configs_per_strategy: int = 3,
+    strategies: List[str] = None,
+    host_cation: str = "Ce",
+    dopant_placement: str = "random",
+    dopant_preference: float = 0.7,
+    vacancy_preference: float = 0.7,
+    pr_trivalent_fraction: float = 1.0,
+    z_threshold: float = 0.3,
+    random_seed: int = None
+) -> List[Dict]
+```
+
+Generate multiple configurations with different placement strategies.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `dopant` | `str` | - | Dopant element |
+| `dopant_fraction` | `float` | - | Fraction of host cations to replace |
+| `n_configs_per_strategy` | `int` | `3` | Configurations per strategy |
+| `strategies` | `List[str]` | `["random", "surface", "near_dopant"]` | Strategies to use |
+
+**Returns:**
+
+```python
+[{
+    "atoms": Atoms,
+    "dopant": str,
+    "dopant_fraction": float,
+    "vacancy_placement": str,
+    "config_id": int,
+}, ...]
+```
+
+**Example:**
+
+```python
+pool = builder.create_doped_pool(
+    dopant="Sm",
+    dopant_fraction=0.15,
+    n_configs_per_strategy=5,
+    strategies=["random", "surface", "near_dopant"],
+)
+print(f"Generated {len(pool)} configurations")  # 15 configs
+```
+
+---
+
+## DopedCeriaStructure
+
+Structure class for doped ceria materials with metadata tracking.
+
+```python
+from nh3sofc.structure import DopedCeriaStructure
+```
+
+### Constructor
+
+```python
+DopedCeriaStructure(
+    atoms: Atoms,
+    dopant: str,
+    dopant_fraction: float,
+    n_vacancies: int,
+    parent_formula: str = None
+)
+```
+
+### Class Methods
+
+#### from_ceria
+
+```python
+@classmethod
+DopedCeriaStructure.from_ceria(
+    ceria: Union[Atoms, BaseStructure],
+    dopant: str,
+    dopant_fraction: float,
+    host_cation: str = "Ce",
+    vacancy_placement: str = "random",
+    dopant_placement: str = "random",
+    random_seed: int = None
+) -> DopedCeriaStructure
+```
+
+Create doped ceria from pristine CeO2 structure.
+
+**Example:**
+
+```python
+doped = DopedCeriaStructure.from_ceria(
+    ceo2_slab,
+    dopant="Gd",
+    dopant_fraction=0.10,
+)
+print(doped.get_dopant_name())  # "GDC"
+```
+
+### Methods
+
+#### get_stoichiometry
+
+```python
+get_stoichiometry() -> Dict[str, float]
+```
+
+Calculate stoichiometry relative to total cation sites.
+
+**Example:**
+
+```python
+stoich = doped.get_stoichiometry()
+# {"Ce": 0.9, "Gd": 0.1, "O": 1.95}
+```
+
+#### get_dopant_name
+
+```python
+get_dopant_name() -> str
+```
+
+Get material abbreviation (GDC, SDC, PDC, etc.).
+
+### Attributes
+
+| Name | Type | Description |
+|------|------|-------------|
+| `dopant` | `str` | Dopant element symbol |
+| `dopant_fraction` | `float` | Fraction of host cations replaced |
+| `n_vacancies` | `int` | Number of oxygen vacancies created |
+| `parent_formula` | `str` | Original CeO2 formula |
+
+---
+
+## Dopant Analysis Functions
+
+### analyze_dopant_distribution
+
+```python
+analyze_dopant_distribution(
+    atoms: Atoms,
+    dopant: str,
+    reference_atoms: Atoms = None,
+    z_threshold: float = 0.3,
+    near_dopant_cutoff: float = 3.5
+) -> Dict[str, Any]
+```
+
+Analyze dopant and vacancy distribution in a structure.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `atoms` | `Atoms` | - | Doped structure to analyze |
+| `dopant` | `str` | - | Dopant element symbol |
+| `reference_atoms` | `Atoms` | `None` | Original structure for vacancy counting |
+| `z_threshold` | `float` | `0.3` | Surface region fraction |
+| `near_dopant_cutoff` | `float` | `3.5` | Distance cutoff (Å) for near-dopant analysis |
+
+**Returns:**
+
+```python
+{
+    "dopant": str,
+    "dopant_total": int,
+    "dopant_surface": int,
+    "dopant_surface_fraction": float,
+    "vacancy_total": int,
+    "vacancy_near_dopant": int,
+    "vacancy_near_dopant_fraction": float,
+    ...
+}
+```
+
+**Example:**
+
+```python
+from nh3sofc.structure import analyze_dopant_distribution
+
+stats = analyze_dopant_distribution(gdc, "Gd", reference_atoms=ceo2)
+print(f"Gd in surface: {stats['dopant_surface_fraction']:.1%}")
+print(f"Vacancies near Gd: {stats['vacancy_near_dopant_fraction']:.1%}")
+```
+
+### generate_dopant_series
+
+```python
+generate_dopant_series(
+    structure: Union[Atoms, BaseStructure],
+    dopant: str,
+    dopant_fractions: List[float],
+    n_configs: int = 3,
+    host_cation: str = "Ce",
+    random_seed: int = None
+) -> List[Dict]
+```
+
+Generate structures with varying dopant concentrations.
+
+**Example:**
+
+```python
+from nh3sofc.structure import generate_dopant_series
+
+series = generate_dopant_series(
+    ceo2_slab,
+    dopant="Gd",
+    dopant_fractions=[0.05, 0.10, 0.15, 0.20],
+    n_configs=5,
+)
+```
+
+### print_dopant_analysis
+
+```python
+print_dopant_analysis(stats: Dict[str, Any], title: str = "Dopant Distribution Analysis")
+```
+
+Print formatted summary of dopant distribution analysis.
+
+---
+
+## Dopant Constants
+
+Available in `nh3sofc.core.constants`:
+
+```python
+from nh3sofc.core.constants import ACCEPTOR_DOPANTS, HOST_CATIONS, CHARGE_COMPENSATION
+
+# Supported acceptor dopants for CeO2
+ACCEPTOR_DOPANTS = {
+    "Sm": {"charge": +3, "ionic_radius": 1.079, "name": "Samarium"},
+    "Gd": {"charge": +3, "ionic_radius": 1.053, "name": "Gadolinium"},
+    "Pr": {"charge": +3, "ionic_radius": 1.126, "name": "Praseodymium"},
+    "Y":  {"charge": +3, "ionic_radius": 1.019, "name": "Yttrium"},
+    "La": {"charge": +3, "ionic_radius": 1.160, "name": "Lanthanum"},
+    "Nd": {"charge": +3, "ionic_radius": 1.109, "name": "Neodymium"},
+}
+
+# Host cations
+HOST_CATIONS = {
+    "Ce": {"charge": +4, "ionic_radius": 0.970},
+    "Zr": {"charge": +4, "ionic_radius": 0.840},
+}
+
+# Charge compensation: 2 M³⁺ + 1 V_O^{2+} → neutral
+CHARGE_COMPENSATION = {
+    3: (2, 1),  # 2 trivalent dopants : 1 vacancy
+    2: (1, 1),  # 1 divalent dopant : 1 vacancy
+}
+```
