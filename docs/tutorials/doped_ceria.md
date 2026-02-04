@@ -20,6 +20,18 @@ Trivalent dopants (M³⁺) substitute Ce⁴⁺ sites as acceptor dopants. Charge
 
 This gives a 2:1 dopant-to-vacancy ratio for charge neutrality.
 
+!!! note "Odd Number of Dopants"
+    When the number of dopants is odd (e.g., 9 Gd³⁺), the ideal vacancy count would be
+    non-integer (4.5). The code uses floor division, creating 4 vacancies in this case.
+
+    The uncompensated negative charge physically corresponds to Ce⁴⁺ → Ce³⁺ reduction
+    (small polaron formation), which is realistic for reducible CeO₂.
+
+    **Options:**
+
+    - Adjust `dopant_fraction` to get an even number of dopants for exact 2:1 stoichiometry
+    - Accept the implicit Ce³⁺ formation (physically reasonable)
+
 ## Basic Usage
 
 ### Creating Gd-Doped Ceria (GDC)
