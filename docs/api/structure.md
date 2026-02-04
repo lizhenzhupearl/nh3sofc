@@ -982,8 +982,8 @@ pdc = builder.create_doped_structure(
 ```python
 create_doped_pool(
     dopant: str,
-    dopant_fraction: float,
-    n_configs_per_strategy: int = 3,
+    dopant_fraction: Union[float, List[float]],
+    n_configs: int = 3,
     strategies: List[str] = None,
     host_cation: str = "Ce",
     dopant_placement: str = "random",
@@ -995,16 +995,21 @@ create_doped_pool(
 ) -> List[Dict]
 ```
 
-Generate multiple configurations with different placement strategies.
+Generate multiple doped configurations for screening.
 
 **Parameters:**
 
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `dopant` | `str` | - | Dopant element |
-| `dopant_fraction` | `float` | - | Fraction of host cations to replace |
-| `n_configs_per_strategy` | `int` | `3` | Configurations per strategy |
-| `strategies` | `List[str]` | `["random", "surface", "near_dopant"]` | Strategies to use |
+| `dopant_fraction` | `float` or `List[float]` | - | Fraction(s) of host cations to replace. Single value or list for concentration series. |
+| `n_configs` | `int` | `3` | Configurations per (fraction, strategy) combination |
+| `strategies` | `List[str]` | See below | Strategies to use |
+
+**Default strategies:**
+
+- Single fraction: `["random", "surface", "near_dopant"]`
+- List of fractions: `["random"]` (concentration series typically don't need strategy variation)
 
 **Returns:**
 
@@ -1018,16 +1023,25 @@ Generate multiple configurations with different placement strategies.
 }, ...]
 ```
 
-**Example:**
+**Examples:**
 
 ```python
+# Single fraction, multiple strategies
 pool = builder.create_doped_pool(
     dopant="Sm",
     dopant_fraction=0.15,
-    n_configs_per_strategy=5,
+    n_configs=5,
     strategies=["random", "surface", "near_dopant"],
 )
 print(f"Generated {len(pool)} configurations")  # 15 configs
+
+# Concentration series (multiple fractions)
+pool = builder.create_doped_pool(
+    dopant="Gd",
+    dopant_fraction=[0.05, 0.10, 0.15, 0.20],
+    n_configs=3,
+)
+print(f"Generated {len(pool)} configurations")  # 12 configs
 ```
 
 ---
@@ -1169,7 +1183,10 @@ print(f"Gd in surface: {stats['dopant_surface_fraction']:.1%}")
 print(f"Vacancies near Gd: {stats['vacancy_near_dopant_fraction']:.1%}")
 ```
 
-### generate_dopant_series
+### generate_dopant_series (Deprecated)
+
+!!! warning "Deprecated"
+    Use `DopantBuilder.create_doped_pool(dopant_fraction=[...])` instead.
 
 ```python
 generate_dopant_series(
@@ -1184,15 +1201,14 @@ generate_dopant_series(
 
 Generate structures with varying dopant concentrations.
 
-**Example:**
+**Preferred approach:**
 
 ```python
-from nh3sofc.structure import generate_dopant_series
-
-series = generate_dopant_series(
-    ceo2_slab,
+# Use create_doped_pool with list of fractions instead
+builder = DopantBuilder(ceo2_slab)
+pool = builder.create_doped_pool(
     dopant="Gd",
-    dopant_fractions=[0.05, 0.10, 0.15, 0.20],
+    dopant_fraction=[0.05, 0.10, 0.15, 0.20],
     n_configs=5,
 )
 ```

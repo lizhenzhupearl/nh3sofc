@@ -169,7 +169,7 @@ For screening studies, generate multiple configurations:
 pool = builder.create_doped_pool(
     dopant="Gd",
     dopant_fraction=0.15,
-    n_configs_per_strategy=5,
+    n_configs=5,
     strategies=["random", "surface", "near_dopant"],
     random_seed=42,
 )
@@ -183,27 +183,30 @@ for config in pool[:3]:
 
 ## Concentration Series
 
-Generate structures with varying dopant levels:
+Generate structures with varying dopant levels by passing a list of fractions:
 
 ```python
-from nh3sofc.structure import generate_dopant_series
-
-series = generate_dopant_series(
-    ceo2_slab,
+# Use create_doped_pool with a list of fractions
+pool = builder.create_doped_pool(
     dopant="Gd",
-    dopant_fractions=[0.05, 0.10, 0.15, 0.20, 0.25],
+    dopant_fraction=[0.05, 0.10, 0.15, 0.20, 0.25],
     n_configs=3,
     random_seed=42,
 )
 
-print(f"Generated {len(series)} structures")  # 15 (5 fractions × 3 configs)
+print(f"Generated {len(pool)} structures")  # 15 (5 fractions × 3 configs)
 
 # Group by fraction
 from collections import defaultdict
 by_fraction = defaultdict(list)
-for s in series:
+for s in pool:
     by_fraction[s["dopant_fraction"]].append(s["atoms"])
 ```
+
+!!! tip "Default Strategy for Concentration Series"
+    When `dopant_fraction` is a list, the default strategy is `["random"]` since
+    concentration series typically don't need strategy variation. Override with
+    `strategies=["random", "surface"]` if needed.
 
 ## Analysis
 

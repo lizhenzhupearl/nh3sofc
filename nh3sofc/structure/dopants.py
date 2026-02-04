@@ -439,8 +439,8 @@ class DopantBuilder:
     def create_doped_pool(
         self,
         dopant: str,
-        dopant_fraction: float,
-        n_configs_per_strategy: int = 3,
+        dopant_fraction: Union[float, List[float]],
+        n_configs: int = 3,
         strategies: Optional[List[str]] = None,
         host_cation: str = "Ce",
         dopant_placement: str = "random",
@@ -451,22 +451,27 @@ class DopantBuilder:
         random_seed: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Generate multiple configurations with different placement strategies.
+        Generate multiple doped configurations for screening.
 
-        Creates a pool of doped structures for screening, varying the vacancy
-        placement strategy while keeping dopant placement consistent.
+        Creates a pool of doped structures by varying:
+        - Dopant fraction (if a list is provided)
+        - Vacancy placement strategy
+        - Random configurations per combination
 
         Parameters
         ----------
         dopant : str
             Dopant element ("Sm", "Gd", "Pr", "Y", "La", "Nd")
-        dopant_fraction : float
-            Fraction of host cations to replace
-        n_configs_per_strategy : int
-            Number of random configurations per strategy (default: 3)
+        dopant_fraction : float or list of float
+            Fraction(s) of host cations to replace. Can be a single value
+            or a list for concentration series (e.g., [0.05, 0.10, 0.15, 0.20])
+        n_configs : int
+            Number of random configurations per (fraction, strategy) combination.
+            Default: 3
         strategies : list, optional
             List of vacancy placement strategies.
-            Default: ["random", "surface", "near_dopant"]
+            Default: ["random"] if dopant_fraction is a list, else
+            ["random", "surface", "near_dopant"]
         host_cation : str
             Cation to replace (default: "Ce")
         dopant_placement : str
@@ -497,51 +502,72 @@ class DopantBuilder:
 
         Examples
         --------
+        >>> # Single fraction, multiple strategies
         >>> pool = builder.create_doped_pool(
         ...     dopant="Sm",
         ...     dopant_fraction=0.15,
-        ...     n_configs_per_strategy=5,
+        ...     n_configs=5,
         ...     strategies=["random", "surface", "near_dopant"],
         ... )
-        >>> print(f"Generated {len(pool)} configurations")
+        >>> print(f"Generated {len(pool)} configurations")  # 15
+
+        >>> # Multiple fractions (concentration series)
+        >>> pool = builder.create_doped_pool(
+        ...     dopant="Gd",
+        ...     dopant_fraction=[0.05, 0.10, 0.15, 0.20],
+        ...     n_configs=3,
+        ... )
+        >>> print(f"Generated {len(pool)} configurations")  # 12
         """
+        # Normalize dopant_fraction to list
+        if isinstance(dopant_fraction, (int, float)):
+            fractions = [float(dopant_fraction)]
+        else:
+            fractions = list(dopant_fraction)
+
+        # Default strategies: if multiple fractions, just use random
+        # (concentration series typically don't need strategy variation)
         if strategies is None:
-            strategies = ["random", "surface", "near_dopant"]
+            if len(fractions) > 1:
+                strategies = ["random"]
+            else:
+                strategies = ["random", "surface", "near_dopant"]
 
         results = []
         config_id = 0
 
-        for strategy in strategies:
-            for i in range(n_configs_per_strategy):
-                seed = None
-                if random_seed is not None:
-                    seed = random_seed + config_id
+        for frac in fractions:
+            for strategy in strategies:
+                for i in range(n_configs):
+                    seed = None
+                    if random_seed is not None:
+                        seed = random_seed + config_id
 
-                atoms = self.create_doped_structure(
-                    dopant=dopant,
-                    dopant_fraction=dopant_fraction,
-                    host_cation=host_cation,
-                    vacancy_placement=strategy,
-                    dopant_placement=dopant_placement,
-                    dopant_preference=dopant_preference,
-                    vacancy_preference=vacancy_preference,
-                    pr_trivalent_fraction=pr_trivalent_fraction,
-                    z_threshold=z_threshold,
-                    random_seed=seed,
-                )
+                    atoms = self.create_doped_structure(
+                        dopant=dopant,
+                        dopant_fraction=frac,
+                        host_cation=host_cation,
+                        vacancy_placement=strategy,
+                        dopant_placement=dopant_placement,
+                        dopant_preference=dopant_preference,
+                        vacancy_preference=vacancy_preference,
+                        pr_trivalent_fraction=pr_trivalent_fraction,
+                        z_threshold=z_threshold,
+                        random_seed=seed,
+                    )
 
-                results.append({
-                    "atoms": atoms,
-                    "dopant": dopant,
-                    "dopant_fraction": dopant_fraction,
-                    "vacancy_placement": strategy,
-                    "dopant_placement": dopant_placement,
-                    "dopant_preference": dopant_preference,
-                    "vacancy_preference": vacancy_preference,
-                    "z_threshold": z_threshold,
-                    "config_id": config_id,
-                })
-                config_id += 1
+                    results.append({
+                        "atoms": atoms,
+                        "dopant": dopant,
+                        "dopant_fraction": frac,
+                        "vacancy_placement": strategy,
+                        "dopant_placement": dopant_placement,
+                        "dopant_preference": dopant_preference,
+                        "vacancy_preference": vacancy_preference,
+                        "z_threshold": z_threshold,
+                        "config_id": config_id,
+                    })
+                    config_id += 1
 
         return results
 
@@ -915,6 +941,10 @@ def generate_dopant_series(
     """
     Generate structures with varying dopant concentrations.
 
+    .. deprecated::
+        Use ``DopantBuilder.create_doped_pool(dopant_fraction=[...])`` instead.
+        This function is kept for backwards compatibility.
+
     Parameters
     ----------
     structure : Atoms or BaseStructure
@@ -937,40 +967,31 @@ def generate_dopant_series(
 
     Examples
     --------
-    >>> series = generate_dopant_series(
-    ...     ceo2_slab,
+    >>> # Preferred: use create_doped_pool with list of fractions
+    >>> builder = DopantBuilder(ceo2_slab)
+    >>> pool = builder.create_doped_pool(
     ...     dopant="Gd",
-    ...     dopant_fractions=[0.05, 0.10, 0.15, 0.20],
+    ...     dopant_fraction=[0.05, 0.10, 0.15, 0.20],
     ...     n_configs=5,
     ... )
-    >>> print(f"Generated {len(series)} configurations")
     """
+    import warnings
+    warnings.warn(
+        "generate_dopant_series() is deprecated. Use "
+        "DopantBuilder.create_doped_pool(dopant_fraction=[...]) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     builder = DopantBuilder(structure)
-    results = []
-    config_id = 0
-
-    for frac in dopant_fractions:
-        for i in range(n_configs):
-            seed = None
-            if random_seed is not None:
-                seed = random_seed + config_id
-
-            atoms = builder.create_doped_structure(
-                dopant=dopant,
-                dopant_fraction=frac,
-                host_cation=host_cation,
-                random_seed=seed,
-            )
-
-            results.append({
-                "atoms": atoms,
-                "dopant": dopant,
-                "dopant_fraction": frac,
-                "config_id": config_id,
-            })
-            config_id += 1
-
-    return results
+    return builder.create_doped_pool(
+        dopant=dopant,
+        dopant_fraction=dopant_fractions,
+        n_configs=n_configs,
+        strategies=["random"],
+        host_cation=host_cation,
+        random_seed=random_seed,
+    )
 
 
 def print_dopant_analysis(

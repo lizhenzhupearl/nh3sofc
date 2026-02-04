@@ -209,7 +209,7 @@ class TestDopantModule:
         pool = builder.create_doped_pool(
             dopant="Gd",
             dopant_fraction=0.25,
-            n_configs_per_strategy=2,
+            n_configs=2,
             strategies=["random", "surface"],
             random_seed=42,
         )
@@ -217,6 +217,25 @@ class TestDopantModule:
         assert len(pool) == 4  # 2 strategies * 2 configs
         assert all("atoms" in config for config in pool)
         assert all("vacancy_placement" in config for config in pool)
+
+    def test_create_doped_pool_with_fraction_list(self, ceo2_slab):
+        """Test generating pool with multiple dopant fractions."""
+        from nh3sofc.structure import DopantBuilder
+
+        builder = DopantBuilder(ceo2_slab)
+        pool = builder.create_doped_pool(
+            dopant="Gd",
+            dopant_fraction=[0.125, 0.25, 0.375],  # 1, 2, 3 dopants
+            n_configs=2,
+            random_seed=42,
+        )
+
+        # 3 fractions * 1 strategy (default "random" for list) * 2 configs = 6
+        assert len(pool) == 6
+
+        # Check that different fractions are present
+        fractions = set(c["dopant_fraction"] for c in pool)
+        assert fractions == {0.125, 0.25, 0.375}
 
     def test_doped_ceria_structure_from_ceria(self, ceo2_slab):
         """Test DopedCeriaStructure.from_ceria factory method."""
@@ -275,17 +294,24 @@ class TestDopantModule:
         assert "dopant_surface_fraction" in stats
         assert "vacancy_near_dopant_fraction" in stats
 
-    def test_generate_dopant_series(self, ceo2_slab):
-        """Test generating series with varying dopant concentrations."""
+    def test_generate_dopant_series_deprecated(self, ceo2_slab):
+        """Test deprecated generate_dopant_series (backwards compatibility)."""
+        import warnings
         from nh3sofc.structure import generate_dopant_series
 
-        series = generate_dopant_series(
-            ceo2_slab,
-            dopant="Gd",
-            dopant_fractions=[0.125, 0.25],  # 1 and 2 dopants
-            n_configs=2,
-            random_seed=42,
-        )
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            series = generate_dopant_series(
+                ceo2_slab,
+                dopant="Gd",
+                dopant_fractions=[0.125, 0.25],  # 1 and 2 dopants
+                n_configs=2,
+                random_seed=42,
+            )
+            # Check deprecation warning was issued
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "deprecated" in str(w[0].message).lower()
 
         assert len(series) == 4  # 2 fractions * 2 configs
         assert all("atoms" in config for config in series)
