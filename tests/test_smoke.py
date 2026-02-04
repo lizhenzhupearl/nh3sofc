@@ -339,6 +339,28 @@ class TestDopantModule:
         # Only 2 effective Pr³⁺ -> 1 vacancy
         assert o_count == original_o - 1
 
+    def test_tb_mixed_valence(self, ceo2_slab):
+        """Test Tb doping with mixed Tb³⁺/Tb⁴⁺."""
+        from nh3sofc.structure import DopantBuilder
+
+        builder = DopantBuilder(ceo2_slab)
+        original_o = len(builder.get_element_indices("O"))
+
+        # 50% Tb with only half being Tb³⁺
+        tdc = builder.create_doped_structure(
+            dopant="Tb",
+            dopant_fraction=0.50,  # 4 Tb
+            pr_trivalent_fraction=0.5,  # Only 2 effective for vacancies
+            random_seed=42,
+        )
+
+        tb_count = sum(1 for s in tdc.get_chemical_symbols() if s == "Tb")
+        o_count = sum(1 for s in tdc.get_chemical_symbols() if s == "O")
+
+        assert tb_count == 4
+        # Only 2 effective Tb³⁺ -> 1 vacancy
+        assert o_count == original_o - 1
+
     def test_vacancy_placement_strategies(self, ceo2_slab):
         """Test different vacancy placement strategies."""
         from nh3sofc.structure import DopantBuilder

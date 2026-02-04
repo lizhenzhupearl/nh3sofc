@@ -315,8 +315,8 @@ class DopantBuilder:
             0.7 = moderate bias, 1.0 = strong bias
             Only applies when vacancy_placement != "random"
         pr_trivalent_fraction : float
-            For Pr only: fraction that is Pr³⁺ (rest is Pr⁴⁺, no vacancy contribution)
-            Vacancy count = floor(n_Pr * pr_trivalent_fraction / 2)
+            For Pr and Tb: fraction that is M³⁺ (rest is M⁴⁺, no vacancy contribution).
+            Vacancy count = floor(n_dopants * pr_trivalent_fraction / 2)
         z_threshold : float
             Fraction of slab considered "surface" (default: 0.3 = top 30%)
         random_seed : int, optional
@@ -395,8 +395,8 @@ class DopantBuilder:
 
             # Calculate effective dopants for vacancy calculation
             effective_dopants = n_dopants
-            if dopant == "Pr":
-                # Pr can be Pr³⁺ or Pr⁴⁺; only Pr³⁺ contributes to vacancies
+            if dopant in ("Pr", "Tb"):
+                # Pr and Tb can be M³⁺ or M⁴⁺; only M³⁺ contributes to vacancies
                 effective_dopants = int(n_dopants * pr_trivalent_fraction)
 
             # Calculate number of vacancies needed
@@ -481,7 +481,7 @@ class DopantBuilder:
         vacancy_preference : float
             Vacancy placement preference strength (default: 0.7)
         pr_trivalent_fraction : float
-            For Pr: fraction that is Pr³⁺ (default: 1.0)
+            For Pr/Tb: fraction that is M³⁺ (default: 1.0)
         z_threshold : float
             Fraction of slab considered surface (default: 0.3)
         random_seed : int, optional
@@ -683,7 +683,7 @@ class DopedCeriaStructure(BaseStructure):
         vacancy_preference : float
             Vacancy placement preference strength
         pr_trivalent_fraction : float
-            For Pr: fraction that is Pr³⁺
+            For Pr/Tb: fraction that is M³⁺
         z_threshold : float
             Fraction of slab considered surface
         random_seed : int, optional
@@ -772,6 +772,7 @@ class DopedCeriaStructure(BaseStructure):
             "Y": "YDC",   # Yttrium-doped Ceria
             "La": "LDC",  # Lanthanum-doped Ceria
             "Nd": "NDC",  # Neodymium-doped Ceria
+            "Tb": "TDC",  # Terbium-doped Ceria
         }
         return dopant_names.get(self.dopant, f"{self.dopant}-doped Ceria")
 

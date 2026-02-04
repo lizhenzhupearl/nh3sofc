@@ -258,6 +258,7 @@ ACCEPTOR_DOPANTS = {
     "Y":  {"charge": +3, "ionic_radius": 1.019, "name": "Yttrium"},
     "La": {"charge": +3, "ionic_radius": 1.160, "name": "Lanthanum"},
     "Nd": {"charge": +3, "ionic_radius": 1.109, "name": "Neodymium"},
+    "Tb": {"charge": +3, "ionic_radius": 1.040, "name": "Terbium"},  # Can also be +4 (0.88 Å)
 }
 
 # Host cation properties (8-coordinate ionic radii)

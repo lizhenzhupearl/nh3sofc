@@ -144,9 +144,9 @@ gdc_bulk = builder.create_doped_structure(
 )
 ```
 
-## Pr Mixed Valence
+## Mixed Valence Dopants (Pr, Tb)
 
-Praseodymium is unique - it can be Pr³⁺ or Pr⁴⁺:
+Praseodymium and Terbium can exist as M³⁺ or M⁴⁺:
 
 ```python
 # 20% Pr, but only half is Pr³⁺ (contributes to vacancies)
@@ -156,9 +156,20 @@ pdc = builder.create_doped_structure(
     pr_trivalent_fraction=0.5,  # 50% is Pr³⁺
     random_seed=42,
 )
-
 # Effective: 10% Pr³⁺ → 5% vacancies (half of normal)
+
+# Same applies to Tb
+tdc = builder.create_doped_structure(
+    dopant="Tb",
+    dopant_fraction=0.15,
+    pr_trivalent_fraction=0.7,  # 70% is Tb³⁺
+    random_seed=42,
+)
 ```
+
+!!! note "Parameter Name"
+    The parameter is named `pr_trivalent_fraction` for historical reasons but
+    applies to both Pr and Tb dopants.
 
 ## Generating Configuration Pools
 
@@ -324,6 +335,7 @@ vasp.generate_all(
 | Y | Yttrium | 1.019 | YDC - stable |
 | La | Lanthanum | 1.160 | LDC |
 | Nd | Neodymium | 1.109 | NDC |
+| Tb | Terbium | 1.040 | TDC |
 
 ## Tips
 
