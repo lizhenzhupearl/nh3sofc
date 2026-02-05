@@ -379,3 +379,266 @@ class TestDopantModule:
             assert gdc is not None
             gd_count = sum(1 for s in gdc.get_chemical_symbols() if s == "Gd")
             assert gd_count == 4
+
+
+class TestDopedFluoriteGeneralization:
+    """Test generalized dopant module for multiple fluorite materials (YSZ, ScSZ, etc.)."""
+
+    def test_import_doped_fluorite_structure(self):
+        """Test that DopedFluoriteStructure can be imported."""
+        from nh3sofc.structure import DopedFluoriteStructure
+        assert DopedFluoriteStructure is not None
+
+    def test_import_new_constants(self):
+        """Test that new constants are available."""
+        from nh3sofc.core.constants import (
+            ACCEPTOR_DOPANTS,
+            HOST_CATIONS,
+            FLUORITE_MATERIAL_NAMES,
+        )
+        # New trivalent dopant
+        assert "Sc" in ACCEPTOR_DOPANTS
+        assert ACCEPTOR_DOPANTS["Sc"]["charge"] == +3
+        # New divalent dopants
+        assert "Ca" in ACCEPTOR_DOPANTS
+        assert ACCEPTOR_DOPANTS["Ca"]["charge"] == +2
+        assert "Mg" in ACCEPTOR_DOPANTS
+        assert ACCEPTOR_DOPANTS["Mg"]["charge"] == +2
+        # New host cations
+        assert "Hf" in HOST_CATIONS
+        assert "Th" in HOST_CATIONS
+        # Material names mapping
+        assert ("Zr", "Y") in FLUORITE_MATERIAL_NAMES
+        assert FLUORITE_MATERIAL_NAMES[("Zr", "Y")] == "YSZ"
+        assert FLUORITE_MATERIAL_NAMES[("Zr", "Sc")] == "ScSZ"
+
+    def test_create_ysz(self, zro2_slab):
+        """Test creating Y-doped zirconia (YSZ)."""
+        from nh3sofc.structure import DopantBuilder
+
+        builder = DopantBuilder(zro2_slab)
+        original_zr = len(builder.get_element_indices("Zr"))
+        original_o = len(builder.get_element_indices("O"))
+
+        # 25% Y doping (2 out of 8 Zr atoms)
+        ysz = builder.create_doped_structure(
+            dopant="Y",
+            dopant_fraction=0.25,
+            host_cation="Zr",
+            random_seed=42,
+        )
+
+        # Check dopant substitution
+        y_count = sum(1 for s in ysz.get_chemical_symbols() if s == "Y")
+        zr_count = sum(1 for s in ysz.get_chemical_symbols() if s == "Zr")
+        o_count = sum(1 for s in ysz.get_chemical_symbols() if s == "O")
+
+        assert y_count == 2  # 25% of 8 Zr
+        assert zr_count == 6  # 8 - 2
+        # Check charge compensation: 2 Y -> 1 vacancy
+        assert o_count == original_o - 1  # 16 - 1 = 15
+
+    def test_create_scsz(self, zro2_slab):
+        """Test creating Sc-doped zirconia (ScSZ)."""
+        from nh3sofc.structure import DopantBuilder
+
+        builder = DopantBuilder(zro2_slab)
+
+        scsz = builder.create_doped_structure(
+            dopant="Sc",
+            dopant_fraction=0.50,  # 50% = 4 dopants
+            host_cation="Zr",
+            random_seed=42,
+        )
+
+        sc_count = sum(1 for s in scsz.get_chemical_symbols() if s == "Sc")
+        o_count = sum(1 for s in scsz.get_chemical_symbols() if s == "O")
+
+        assert sc_count == 4  # 50% of 8 Zr
+        # 4 Sc -> 2 vacancies (trivalent)
+        assert o_count == 14  # 16 - 2
+
+    def test_divalent_dopant_ca(self, zro2_slab):
+        """Test divalent Ca dopant (CSZ - 1:1 dopant:vacancy ratio)."""
+        from nh3sofc.structure import DopantBuilder
+
+        builder = DopantBuilder(zro2_slab)
+        original_o = len(builder.get_element_indices("O"))
+
+        # 25% Ca doping (2 out of 8 Zr atoms)
+        csz = builder.create_doped_structure(
+            dopant="Ca",
+            dopant_fraction=0.25,
+            host_cation="Zr",
+            random_seed=42,
+        )
+
+        ca_count = sum(1 for s in csz.get_chemical_symbols() if s == "Ca")
+        o_count = sum(1 for s in csz.get_chemical_symbols() if s == "O")
+
+        assert ca_count == 2
+        # Divalent: 1 Ca -> 1 vacancy (1:1 ratio)
+        assert o_count == original_o - 2  # 16 - 2 = 14
+
+    def test_divalent_dopant_mg(self, zro2_slab):
+        """Test divalent Mg dopant (MSZ)."""
+        from nh3sofc.structure import DopantBuilder
+
+        builder = DopantBuilder(zro2_slab)
+        original_o = len(builder.get_element_indices("O"))
+
+        msz = builder.create_doped_structure(
+            dopant="Mg",
+            dopant_fraction=0.125,  # 1 out of 8 Zr atoms
+            host_cation="Zr",
+            random_seed=42,
+        )
+
+        mg_count = sum(1 for s in msz.get_chemical_symbols() if s == "Mg")
+        o_count = sum(1 for s in msz.get_chemical_symbols() if s == "O")
+
+        assert mg_count == 1
+        # Divalent: 1 Mg -> 1 vacancy
+        assert o_count == original_o - 1  # 16 - 1 = 15
+
+    def test_from_zirconia_factory(self, zro2_slab):
+        """Test DopedFluoriteStructure.from_zirconia factory method."""
+        from nh3sofc.structure import DopedFluoriteStructure
+
+        ysz = DopedFluoriteStructure.from_zirconia(
+            zro2_slab,
+            dopant="Y",
+            dopant_fraction=0.25,
+            random_seed=42,
+        )
+
+        assert ysz.dopant == "Y"
+        assert ysz.dopant_fraction == 0.25
+        assert ysz.host_cation == "Zr"
+        assert ysz.n_vacancies == 1  # 2 Y -> 1 vacancy
+        assert ysz.get_material_name() == "YSZ"
+
+    def test_from_parent_factory(self, zro2_slab):
+        """Test DopedFluoriteStructure.from_parent general factory."""
+        from nh3sofc.structure import DopedFluoriteStructure
+
+        scsz = DopedFluoriteStructure.from_parent(
+            zro2_slab,
+            dopant="Sc",
+            dopant_fraction=0.25,
+            host_cation="Zr",
+            random_seed=42,
+        )
+
+        assert scsz.dopant == "Sc"
+        assert scsz.host_cation == "Zr"
+        assert scsz.get_material_name() == "ScSZ"
+
+    def test_doped_fluorite_from_ceria(self, ceo2_slab):
+        """Test DopedFluoriteStructure.from_ceria convenience method."""
+        from nh3sofc.structure import DopedFluoriteStructure
+
+        gdc = DopedFluoriteStructure.from_ceria(
+            ceo2_slab,
+            dopant="Gd",
+            dopant_fraction=0.25,
+            random_seed=42,
+        )
+
+        assert gdc.dopant == "Gd"
+        assert gdc.host_cation == "Ce"
+        assert gdc.get_material_name() == "GDC"
+
+    def test_get_material_name_fallback(self, ceo2_slab):
+        """Test material name fallback for unknown combinations."""
+        from nh3sofc.structure import DopedFluoriteStructure
+
+        # Sc-doped ceria is uncommon but should work
+        doped = DopedFluoriteStructure.from_parent(
+            ceo2_slab,
+            dopant="Sc",
+            dopant_fraction=0.125,
+            host_cation="Ce",
+            random_seed=42,
+        )
+
+        # Should fall back to descriptive name
+        name = doped.get_material_name()
+        assert "Sc" in name and "CeO2" in name
+
+    def test_doped_ceria_structure_deprecated(self, ceo2_slab):
+        """Test that DopedCeriaStructure shows deprecation warning."""
+        import warnings
+        from nh3sofc.structure import DopedCeriaStructure
+        from ase.build import bulk
+
+        atoms = ceo2_slab.copy()
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            # This should trigger deprecation warning
+            doped = DopedCeriaStructure(
+                atoms=atoms,
+                dopant="Gd",
+                dopant_fraction=0.25,
+                n_vacancies=1,
+            )
+            # Check deprecation warning was issued
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "deprecated" in str(w[0].message).lower()
+
+    def test_get_dopant_name_deprecated(self, ceo2_slab):
+        """Test that get_dopant_name() shows deprecation warning."""
+        import warnings
+        from nh3sofc.structure import DopedFluoriteStructure
+
+        gdc = DopedFluoriteStructure.from_ceria(
+            ceo2_slab,
+            dopant="Gd",
+            dopant_fraction=0.25,
+            random_seed=42,
+        )
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            name = gdc.get_dopant_name()
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert name == "GDC"
+
+    def test_backwards_compat_from_ceria(self, ceo2_slab):
+        """Test backwards compatibility: DopedCeriaStructure.from_ceria still works."""
+        import warnings
+        from nh3sofc.structure import DopedCeriaStructure
+
+        # from_ceria should work without deprecation warning (it's on DopedFluoriteStructure)
+        doped = DopedCeriaStructure.from_ceria(
+            ceo2_slab,
+            dopant="Sm",
+            dopant_fraction=0.25,
+            random_seed=42,
+        )
+
+        assert doped.dopant == "Sm"
+        assert doped.host_cation == "Ce"
+        assert doped.get_material_name() == "SDC"
+
+    def test_create_doped_pool_zirconia(self, zro2_slab):
+        """Test creating pool of YSZ configurations."""
+        from nh3sofc.structure import DopantBuilder
+
+        builder = DopantBuilder(zro2_slab)
+        pool = builder.create_doped_pool(
+            dopant="Y",
+            dopant_fraction=0.25,
+            n_configs=2,
+            strategies=["random", "surface"],
+            host_cation="Zr",
+            random_seed=42,
+        )
+
+        assert len(pool) == 4  # 2 strategies * 2 configs
+        for config in pool:
+            y_count = sum(1 for s in config["atoms"].get_chemical_symbols() if s == "Y")
+            assert y_count == 2  # 25% of 8 Zr

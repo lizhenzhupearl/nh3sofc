@@ -92,7 +92,7 @@ nav:
     - Theoretical Framework: tutorials/theory.md
     - Microkinetic Modeling: tutorials/microkinetics.md
     - Surface Comparison: tutorials/surface_comparison.md
-    - Doped Ceria (GDC/SDC/PDC): tutorials/doped_ceria.md
+    - Doped Fluorite (GDC/YSZ/ScSZ): tutorials/doped_fluorite.md
     - Exsolution Simulation: tutorials/exsolution.md
     - High-Throughput Screening: tutorials/screening.md
     - MACE Force Fields: tutorials/mace.md

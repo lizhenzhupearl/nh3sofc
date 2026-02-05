@@ -249,9 +249,10 @@ DEFAULT_EXSOLUTION_PARAMS = {
     "socket_depth": 1.0,        # A, particle embedding depth
 }
 
-# Acceptor dopant properties for CeO2 (GDC, SDC, PDC, etc.)
+# Acceptor dopant properties for fluorite oxides (GDC, SDC, YSZ, etc.)
 # Ionic radii in Angstroms for 8-coordinate sites (Shannon radii)
 ACCEPTOR_DOPANTS = {
+    # Trivalent dopants (2 dopants : 1 vacancy for charge compensation)
     "Sm": {"charge": +3, "ionic_radius": 1.079, "name": "Samarium"},
     "Gd": {"charge": +3, "ionic_radius": 1.053, "name": "Gadolinium"},
     "Pr": {"charge": +3, "ionic_radius": 1.126, "name": "Praseodymium"},
@@ -259,12 +260,41 @@ ACCEPTOR_DOPANTS = {
     "La": {"charge": +3, "ionic_radius": 1.160, "name": "Lanthanum"},
     "Nd": {"charge": +3, "ionic_radius": 1.109, "name": "Neodymium"},
     "Tb": {"charge": +3, "ionic_radius": 1.040, "name": "Terbium"},  # Can also be +4 (0.88 Å)
+    "Sc": {"charge": +3, "ionic_radius": 0.870, "name": "Scandium"},
+    # Divalent dopants (1 dopant : 1 vacancy for charge compensation)
+    "Ca": {"charge": +2, "ionic_radius": 1.120, "name": "Calcium"},
+    "Mg": {"charge": +2, "ionic_radius": 0.890, "name": "Magnesium"},
 }
 
 # Host cation properties (8-coordinate ionic radii)
 HOST_CATIONS = {
-    "Ce": {"charge": +4, "ionic_radius": 0.970},
-    "Zr": {"charge": +4, "ionic_radius": 0.840},
+    "Ce": {"charge": +4, "ionic_radius": 0.970, "name": "Cerium", "oxide": "CeO2"},
+    "Zr": {"charge": +4, "ionic_radius": 0.840, "name": "Zirconium", "oxide": "ZrO2"},
+    "Hf": {"charge": +4, "ionic_radius": 0.830, "name": "Hafnium", "oxide": "HfO2"},
+    "Th": {"charge": +4, "ionic_radius": 1.050, "name": "Thorium", "oxide": "ThO2"},
+}
+
+# Conventional material names for doped fluorites
+# Maps (host_cation, dopant) tuples to common abbreviations
+FLUORITE_MATERIAL_NAMES = {
+    # Ceria-based
+    ("Ce", "Gd"): "GDC",   # Gadolinium-doped Ceria
+    ("Ce", "Sm"): "SDC",   # Samarium-doped Ceria
+    ("Ce", "Pr"): "PDC",   # Praseodymium-doped Ceria
+    ("Ce", "Y"):  "YDC",   # Yttrium-doped Ceria
+    ("Ce", "La"): "LDC",   # Lanthanum-doped Ceria
+    ("Ce", "Nd"): "NDC",   # Neodymium-doped Ceria
+    ("Ce", "Tb"): "TDC",   # Terbium-doped Ceria
+    # Zirconia-based
+    ("Zr", "Y"):  "YSZ",   # Yttria-Stabilized Zirconia
+    ("Zr", "Sc"): "ScSZ",  # Scandia-Stabilized Zirconia
+    ("Zr", "Ca"): "CSZ",   # Calcia-Stabilized Zirconia
+    ("Zr", "Mg"): "MSZ",   # Magnesia-Stabilized Zirconia
+    # Hafnia-based
+    ("Hf", "Y"):  "YSH",   # Yttria-Stabilized Hafnia
+    # Thoria-based
+    ("Th", "Ca"): "CTh",   # Calcia-doped Thoria
+    ("Th", "Y"):  "YTh",   # Yttria-doped Thoria
 }
 
 # Charge compensation ratios for acceptor doping

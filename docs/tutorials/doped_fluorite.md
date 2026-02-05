@@ -1,36 +1,45 @@
-# Doped Ceria Tutorial (GDC, SDC, PDC)
+# Doped Fluorite Materials Tutorial (GDC, SDC, YSZ, ScSZ)
 
-This tutorial covers creating acceptor-doped ceria structures for solid oxide fuel cell applications.
+This tutorial covers creating acceptor-doped fluorite oxide structures for solid oxide fuel cell applications.
 
 ## Overview
 
-Doped ceria is crucial for ionic conductivity in SOFCs:
+Doped fluorite oxides are crucial for ionic conductivity in SOFCs:
+
+### Ceria-Based (CeO2)
 
 - **GDC**: Gadolinium-doped ceria (Ce₁₋ₓGdₓO₂₋δ)
 - **SDC**: Samarium-doped ceria (Ce₁₋ₓSmₓO₂₋δ)
 - **PDC**: Praseodymium-doped ceria (Ce₁₋ₓPrₓO₂₋δ)
+- **YDC**: Yttrium-doped ceria (Ce₁₋ₓYₓO₂₋δ)
+
+### Zirconia-Based (ZrO2)
+
+- **YSZ**: Yttria-stabilized zirconia (Zr₁₋ₓYₓO₂₋δ)
+- **ScSZ**: Scandia-stabilized zirconia (Zr₁₋ₓScₓO₂₋δ)
+- **CSZ**: Calcia-stabilized zirconia (Zr₁₋ₓCaₓO₂₋δ)
+- **MSZ**: Magnesia-stabilized zirconia (Zr₁₋ₓMgₓO₂₋δ)
 
 ### Chemistry
 
-Trivalent dopants (M³⁺) substitute Ce⁴⁺ sites as acceptor dopants. Charge compensation requires oxygen vacancy formation:
+Acceptor dopants substitute M⁴⁺ sites (Ce⁴⁺, Zr⁴⁺). Charge compensation requires oxygen vacancy formation:
 
+**Trivalent dopants (Gd³⁺, Y³⁺, Sc³⁺):**
 ```
-2 Ce⁴⁺ → 2 M³⁺ + V_O^{2+}
+2 M⁴⁺ → 2 D³⁺ + V_O^{2+}  (2:1 dopant:vacancy ratio)
 ```
 
-This gives a 2:1 dopant-to-vacancy ratio for charge neutrality.
+**Divalent dopants (Ca²⁺, Mg²⁺):**
+```
+M⁴⁺ → D²⁺ + V_O^{2+}  (1:1 dopant:vacancy ratio)
+```
 
-!!! note "Odd Number of Dopants"
-    When the number of dopants is odd (e.g., 9 Gd³⁺), the ideal vacancy count would be
+!!! note "Odd Number of Trivalent Dopants"
+    When the number of trivalent dopants is odd (e.g., 9 Gd³⁺), the ideal vacancy count would be
     non-integer (4.5). The code uses floor division, creating 4 vacancies in this case.
 
-    The uncompensated negative charge physically corresponds to Ce⁴⁺ → Ce³⁺ reduction
-    (small polaron formation), which is realistic for reducible CeO₂.
-
-    **Options:**
-
-    - Adjust `dopant_fraction` to get an even number of dopants for exact 2:1 stoichiometry
-    - Accept the implicit Ce³⁺ formation (physically reasonable)
+    The uncompensated negative charge physically corresponds to M⁴⁺ → M³⁺ reduction
+    (small polaron formation), which is realistic for reducible oxides like CeO₂.
 
 ## Basic Usage
 
@@ -66,25 +75,99 @@ print(f"O atoms: {n_o}")          # 16 - vacancies
 print(f"Charge balanced: 2 Gd → 1 vacancy")
 ```
 
-### Using DopedCeriaStructure
-
-The `DopedCeriaStructure` class tracks dopant metadata:
+### Creating Yttria-Stabilized Zirconia (YSZ)
 
 ```python
-from nh3sofc.structure import DopedCeriaStructure
+from ase.build import bulk
+from nh3sofc.structure import DopantBuilder
 
-# Create from pristine ceria
-doped = DopedCeriaStructure.from_ceria(
-    ceo2_slab,
-    dopant="Sm",
-    dopant_fraction=0.15,
+# Create ZrO2 supercell (cubic fluorite phase)
+zro2 = bulk('ZrO2', 'fluorite', a=5.07)
+zro2_slab = zro2 * (2, 2, 2)  # 8 Zr, 16 O
+
+# Initialize builder
+builder = DopantBuilder(zro2_slab)
+
+# Create 8% Y-doped zirconia (8YSZ)
+ysz = builder.create_doped_structure(
+    dopant="Y",
+    dopant_fraction=0.08,
+    host_cation="Zr",  # Specify the host cation
     random_seed=42,
 )
 
-print(doped)  # DopedCeriaStructure(SDC, Sm_frac=15.0%, n_vac=1)
-print(doped.get_dopant_name())  # "SDC"
-print(doped.get_stoichiometry())  # {"Ce": 0.875, "Sm": 0.125, "O": 1.9375}
+# Check composition
+symbols = ysz.get_chemical_symbols()
+print(f"Y atoms: {symbols.count('Y')}")
+print(f"Zr atoms: {symbols.count('Zr')}")
 ```
+
+### Creating Scandia-Stabilized Zirconia (ScSZ)
+
+```python
+# ScSZ has the highest ionic conductivity among zirconia-based electrolytes
+scsz = builder.create_doped_structure(
+    dopant="Sc",
+    dopant_fraction=0.10,  # 10 mol% Sc2O3
+    host_cation="Zr",
+    random_seed=42,
+)
+```
+
+### Creating Calcia-Stabilized Zirconia (CSZ)
+
+```python
+# Divalent dopants have 1:1 dopant:vacancy ratio
+csz = builder.create_doped_structure(
+    dopant="Ca",
+    dopant_fraction=0.15,
+    host_cation="Zr",
+    random_seed=42,
+)
+
+# 1 Ca²⁺ → 1 vacancy (not 2:1 like trivalent dopants)
+```
+
+### Using DopedFluoriteStructure
+
+The `DopedFluoriteStructure` class tracks dopant metadata:
+
+```python
+from nh3sofc.structure import DopedFluoriteStructure
+
+# Ceria-based (GDC)
+gdc = DopedFluoriteStructure.from_ceria(
+    ceo2_slab,
+    dopant="Gd",
+    dopant_fraction=0.10,
+    random_seed=42,
+)
+print(gdc)  # DopedFluoriteStructure(GDC, Gd_frac=10.0%, n_vac=0)
+print(gdc.get_material_name())  # "GDC"
+
+# Zirconia-based (YSZ)
+ysz = DopedFluoriteStructure.from_zirconia(
+    zro2_slab,
+    dopant="Y",
+    dopant_fraction=0.08,
+    random_seed=42,
+)
+print(ysz.get_material_name())  # "YSZ"
+print(ysz.host_cation)  # "Zr"
+
+# General factory (works with any host)
+doped = DopedFluoriteStructure.from_parent(
+    parent_structure,
+    dopant="Sc",
+    dopant_fraction=0.10,
+    host_cation="Zr",
+    random_seed=42,
+)
+```
+
+!!! tip "Backwards Compatibility"
+    `DopedCeriaStructure` is still available as a deprecated alias.
+    Existing code will continue to work but will show deprecation warnings.
 
 ## Placement Strategies
 
@@ -169,7 +252,8 @@ tdc = builder.create_doped_structure(
 
 !!! note "Parameter Name"
     The parameter is named `pr_trivalent_fraction` for historical reasons but
-    applies to both Pr and Tb dopants.
+    applies to both Pr and Tb dopants. The alias `trivalent_fraction` is also
+    available in `DopedFluoriteStructure.from_ceria()`.
 
 ## Generating Configuration Pools
 
@@ -190,6 +274,20 @@ print(f"Generated {len(pool)} configurations")  # 15 configs
 # Each config has metadata
 for config in pool[:3]:
     print(f"Config {config['config_id']}: {config['vacancy_placement']}")
+```
+
+### Zirconia Pools
+
+```python
+# YSZ configuration pool
+ysz_pool = builder.create_doped_pool(
+    dopant="Y",
+    dopant_fraction=0.08,
+    n_configs=3,
+    strategies=["random", "surface"],
+    host_cation="Zr",
+    random_seed=42,
+)
 ```
 
 ## Concentration Series
@@ -284,7 +382,7 @@ from ase.build import bulk
 from ase.io import write
 from nh3sofc.structure import (
     DopantBuilder,
-    DopedCeriaStructure,
+    DopedFluoriteStructure,
     analyze_dopant_distribution,
     print_dopant_analysis,
 )
@@ -325,21 +423,63 @@ vasp.generate_all(
 )
 ```
 
+### YSZ Workflow Example
+
+```python
+# 1. Create ZrO2 structure
+zro2 = bulk('ZrO2', 'fluorite', a=5.07) * (3, 3, 3)
+
+# 2. Create 8YSZ
+ysz = DopedFluoriteStructure.from_zirconia(
+    zro2,
+    dopant="Y",
+    dopant_fraction=0.08,
+    vacancy_placement="random",
+    random_seed=42,
+)
+
+print(f"Created {ysz.get_material_name()}")
+print(f"Host: {ysz.host_cation}, Dopant: {ysz.dopant}")
+print(f"Vacancies: {ysz.n_vacancies}")
+
+# Save structure
+write("YSZ_8mol.vasp", ysz.atoms, format="vasp")
+```
+
 ## Supported Dopants
+
+### Trivalent Dopants (2:1 dopant:vacancy ratio)
 
 | Dopant | Name | Ionic Radius (Å) | Common Use |
 |--------|------|------------------|------------|
-| Gd | Gadolinium | 1.053 | GDC - highest conductivity |
+| Gd | Gadolinium | 1.053 | GDC - highest conductivity for ceria |
 | Sm | Samarium | 1.079 | SDC - high conductivity |
 | Pr | Praseodymium | 1.126 | PDC - mixed ionic-electronic |
-| Y | Yttrium | 1.019 | YDC - stable |
+| Y | Yttrium | 1.019 | YDC, YSZ - most common for zirconia |
 | La | Lanthanum | 1.160 | LDC |
 | Nd | Neodymium | 1.109 | NDC |
-| Tb | Terbium | 1.040 | TDC |
+| Tb | Terbium | 1.040 | TDC - mixed valence |
+| Sc | Scandium | 0.870 | ScSZ - highest conductivity for zirconia |
+
+### Divalent Dopants (1:1 dopant:vacancy ratio)
+
+| Dopant | Name | Ionic Radius (Å) | Common Use |
+|--------|------|------------------|------------|
+| Ca | Calcium | 1.120 | CSZ - cost-effective |
+| Mg | Magnesium | 0.890 | MSZ |
+
+## Supported Host Materials
+
+| Host | Oxide | Lattice (Å) | Notes |
+|------|-------|-------------|-------|
+| Ce | CeO2 | 5.41 | Reducible, high electronic conductivity at low pO2 |
+| Zr | ZrO2 | 5.07 | Stable, purely ionic conductor |
+| Hf | HfO2 | 5.11 | Similar to zirconia |
+| Th | ThO2 | 5.60 | Nuclear applications |
 
 ## Tips
 
-1. **Dopant fraction**: Typical SOFC concentrations are 10-20% (x = 0.10-0.20)
+1. **Dopant fraction**: Typical SOFC concentrations are 8-20% (x = 0.08-0.20)
 
 2. **Charge balance**: Always verify with `analyze_dopant_distribution()`
 
@@ -347,10 +487,14 @@ vasp.generate_all(
 
 4. **Multiple configs**: Generate pools for statistical sampling of configurations
 
-5. **Pr doping**: Remember to set `pr_trivalent_fraction` for mixed-valence studies
+5. **Mixed valence**: Remember to set `pr_trivalent_fraction` for Pr/Tb studies
+
+6. **YSZ vs ScSZ**: ScSZ has higher conductivity but Sc is more expensive
+
+7. **Divalent dopants**: Remember they create more vacancies per dopant (1:1 vs 2:1)
 
 ## Next Steps
 
 - [VASP Calculations](vasp_calculations.md) - Run DFT on doped structures
 - [High-Throughput Screening](screening.md) - Screen multiple configurations
-- [Exsolution Simulation](exsolution.md) - Metal particles on doped ceria
+- [Exsolution Simulation](exsolution.md) - Metal particles on doped fluorites

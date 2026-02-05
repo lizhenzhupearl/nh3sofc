@@ -1,13 +1,20 @@
-"""Acceptor dopant module for ceria-based materials.
+"""Acceptor dopant module for fluorite-structure oxide materials.
 
-Creates doped ceria structures (GDC, SDC, PDC) with charge-compensating
+Creates doped fluorite structures (GDC, SDC, YSZ, ScSZ, etc.) with charge-compensating
 oxygen vacancies for solid oxide fuel cell applications.
 
+Supported host materials:
+- Ceria (CeO2): GDC, SDC, PDC, YDC, LDC, NDC, TDC
+- Zirconia (ZrO2): YSZ, ScSZ, CSZ, MSZ
+- Hafnia (HfO2): YSH
+- Thoria (ThO2): CTh, YTh
+
 Chemistry:
-- Trivalent dopants (Sm³⁺, Gd³⁺, Pr³⁺) substitute Ce⁴⁺ sites as acceptor dopants
+- Trivalent dopants (Gd³⁺, Y³⁺, Sc³⁺) substitute M⁴⁺ sites as acceptor dopants
+- Divalent dopants (Ca²⁺, Mg²⁺) also act as acceptors
 - Charge compensation requires oxygen vacancy formation
-- 2 Ce⁴⁺ → 2 M³⁺ + V_O^{2+} (2 dopants : 1 vacancy ratio)
-- Formula: Ce₁₋₂ₓM₂ₓO₂₋ₓ (where x = dopant mole fraction from M₂O₃)
+- Trivalent: 2 M³⁺ + V_O^{2+} → net neutral (2 dopants : 1 vacancy)
+- Divalent: 1 M²⁺ + V_O^{2+} → net neutral (1 dopant : 1 vacancy)
 
 Examples
 --------
@@ -18,6 +25,15 @@ Examples
 ...     dopant="Gd",
 ...     dopant_fraction=0.10,  # 10% Gd on Ce sites
 ... )
+
+>>> # Zirconia-based (YSZ)
+>>> zro2_slab = SlabStructure.from_file("ZrO2_111.cif")
+>>> builder = DopantBuilder(zro2_slab)
+>>> ysz = builder.create_doped_structure(
+...     dopant="Y",
+...     dopant_fraction=0.08,
+...     host_cation="Zr",
+... )
 """
 
 from pathlib import Path
@@ -27,7 +43,12 @@ import numpy as np
 from ase import Atoms
 
 from ..core.base import BaseStructure
-from ..core.constants import ACCEPTOR_DOPANTS, HOST_CATIONS, CHARGE_COMPENSATION
+from ..core.constants import (
+    ACCEPTOR_DOPANTS,
+    HOST_CATIONS,
+    CHARGE_COMPENSATION,
+    FLUORITE_MATERIAL_NAMES,
+)
 from .surface import SlabStructure
 
 
@@ -35,7 +56,8 @@ class DopantBuilder:
     """
     Builder class for creating acceptor-doped oxide structures with charge compensation.
 
-    Supports doping of CeO2 with trivalent dopants (Gd, Sm, Pr, Y, La, Nd) and
+    Supports doping of fluorite-structure oxides (CeO2, ZrO2, HfO2, ThO2) with
+    trivalent dopants (Gd, Sm, Y, Sc, etc.) or divalent dopants (Ca, Mg) and
     automatic creation of charge-compensating oxygen vacancies.
 
     Examples
@@ -47,6 +69,15 @@ class DopantBuilder:
     >>> gdc = builder.create_doped_structure(
     ...     dopant="Gd",
     ...     dopant_fraction=0.10,
+    ... )
+
+    >>> # Create YSZ (yttria-stabilized zirconia)
+    >>> zro2 = SlabStructure.from_file("ZrO2_111.cif")
+    >>> builder = DopantBuilder(zro2)
+    >>> ysz = builder.create_doped_structure(
+    ...     dopant="Y",
+    ...     dopant_fraction=0.08,
+    ...     host_cation="Zr",
     ... )
 
     >>> # Create with surface-preferring vacancies
@@ -72,7 +103,7 @@ class DopantBuilder:
         Parameters
         ----------
         structure : SlabStructure or Atoms
-            CeO2 structure (bulk or slab) to dope
+            Fluorite oxide structure (bulk or slab) to dope (CeO2, ZrO2, HfO2, ThO2)
         """
         if isinstance(structure, SlabStructure):
             self.atoms = structure.atoms.copy()
@@ -290,11 +321,11 @@ class DopantBuilder:
         Parameters
         ----------
         dopant : str
-            Dopant element ("Sm", "Gd", "Pr", "Y", "La", "Nd")
+            Dopant element ("Sm", "Gd", "Pr", "Y", "La", "Nd", "Sc", "Ca", "Mg")
         dopant_fraction : float
             Fraction of host cations to replace (0.0 to 1.0)
         host_cation : str
-            Cation to replace (default: "Ce")
+            Cation to replace (default: "Ce"). Use "Zr" for zirconia, "Hf" for hafnia, etc.
         auto_compensate : bool
             Create compensating vacancies automatically (default: True)
         vacancy_placement : str
@@ -316,7 +347,8 @@ class DopantBuilder:
             Only applies when vacancy_placement != "random"
         pr_trivalent_fraction : float
             For Pr and Tb: fraction that is M³⁺ (rest is M⁴⁺, no vacancy contribution).
-            Vacancy count = floor(n_dopants * pr_trivalent_fraction / 2)
+            Vacancy count = floor(n_dopants * trivalent_fraction / 2)
+            Alias: trivalent_fraction
         z_threshold : float
             Fraction of slab considered "surface" (default: 0.3 = top 30%)
         random_seed : int, optional
@@ -348,6 +380,13 @@ class DopantBuilder:
         ...     dopant="Pr",
         ...     dopant_fraction=0.20,
         ...     pr_trivalent_fraction=0.5,  # 50% Pr³⁺, 50% Pr⁴⁺
+        ... )
+
+        >>> # YSZ (yttria-stabilized zirconia)
+        >>> ysz = builder.create_doped_structure(
+        ...     dopant="Y",
+        ...     dopant_fraction=0.08,
+        ...     host_cation="Zr",
         ... )
         """
         if random_seed is not None:
@@ -461,7 +500,7 @@ class DopantBuilder:
         Parameters
         ----------
         dopant : str
-            Dopant element ("Sm", "Gd", "Pr", "Y", "La", "Nd")
+            Dopant element ("Sm", "Gd", "Pr", "Y", "La", "Nd", "Sc", "Ca", "Mg")
         dopant_fraction : float or list of float
             Fraction(s) of host cations to replace. Can be a single value
             or a list for concentration series (e.g., [0.05, 0.10, 0.15, 0.20])
@@ -473,7 +512,7 @@ class DopantBuilder:
             Default: ["random"] if dopant_fraction is a list, else
             ["random", "surface", "near_dopant"]
         host_cation : str
-            Cation to replace (default: "Ce")
+            Cation to replace (default: "Ce"). Use "Zr" for zirconia, "Hf" for hafnia.
         dopant_placement : str
             Dopant placement strategy (default: "random")
         dopant_preference : float
@@ -600,20 +639,37 @@ class DopantBuilder:
         }
 
 
-class DopedCeriaStructure(BaseStructure):
+class DopedFluoriteStructure(BaseStructure):
     """
-    Structure class for doped ceria materials.
+    Structure class for doped fluorite oxide materials.
 
-    Tracks dopant and vacancy information for GDC, SDC, PDC, etc.
+    Tracks dopant and vacancy information for GDC, SDC, YSZ, ScSZ, etc.
 
     Examples
     --------
-    >>> doped = DopedCeriaStructure.from_ceria(
+    >>> # Ceria-based (GDC)
+    >>> doped = DopedFluoriteStructure.from_ceria(
     ...     ceria_slab,
     ...     dopant="Gd",
     ...     dopant_fraction=0.10,
     ... )
-    >>> print(doped.get_stoichiometry())
+    >>> print(doped.get_material_name())  # "GDC"
+
+    >>> # Zirconia-based (YSZ)
+    >>> ysz = DopedFluoriteStructure.from_zirconia(
+    ...     zro2_slab,
+    ...     dopant="Y",
+    ...     dopant_fraction=0.08,
+    ... )
+    >>> print(ysz.get_material_name())  # "YSZ"
+
+    >>> # General factory
+    >>> doped = DopedFluoriteStructure.from_parent(
+    ...     parent_structure,
+    ...     dopant="Sc",
+    ...     dopant_fraction=0.10,
+    ...     host_cation="Zr",
+    ... )
     """
 
     def __init__(
@@ -622,10 +678,11 @@ class DopedCeriaStructure(BaseStructure):
         dopant: str,
         dopant_fraction: float,
         n_vacancies: int,
+        host_cation: str = "Ce",
         parent_formula: Optional[str] = None,
     ):
         """
-        Initialize DopedCeriaStructure.
+        Initialize DopedFluoriteStructure.
 
         Parameters
         ----------
@@ -637,68 +694,92 @@ class DopedCeriaStructure(BaseStructure):
             Fraction of host cations replaced
         n_vacancies : int
             Number of oxygen vacancies created
+        host_cation : str
+            Host cation element (default: "Ce"). Use "Zr" for zirconia, etc.
         parent_formula : str, optional
-            Original ceria formula (e.g., "Ce32O64")
+            Original oxide formula (e.g., "Ce32O64", "Zr32O64")
         """
         super().__init__(atoms)
         self.dopant = dopant
         self.dopant_fraction = dopant_fraction
         self.n_vacancies = n_vacancies
+        self.host_cation = host_cation
         self.parent_formula = parent_formula
 
     @classmethod
-    def from_ceria(
+    def from_parent(
         cls,
-        ceria: Union[Atoms, BaseStructure],
+        parent: Union[Atoms, BaseStructure],
         dopant: str,
         dopant_fraction: float,
-        host_cation: str = "Ce",
+        host_cation: str,
         vacancy_placement: str = "random",
         dopant_placement: str = "random",
         dopant_preference: float = 0.7,
         vacancy_preference: float = 0.7,
-        pr_trivalent_fraction: float = 1.0,
+        trivalent_fraction: float = 1.0,
         z_threshold: float = 0.3,
         random_seed: Optional[int] = None,
-    ) -> "DopedCeriaStructure":
+    ) -> "DopedFluoriteStructure":
         """
-        Create doped ceria from pristine CeO2 structure.
+        Create doped fluorite structure from a pristine parent oxide.
+
+        This is the general factory method that works with any fluorite host
+        (CeO2, ZrO2, HfO2, ThO2).
 
         Parameters
         ----------
-        ceria : Atoms or BaseStructure
-            Parent CeO2 structure
+        parent : Atoms or BaseStructure
+            Parent fluorite oxide structure
         dopant : str
-            Dopant element
+            Dopant element (e.g., "Gd", "Y", "Sc", "Ca")
         dopant_fraction : float
-            Fraction of Ce to replace
+            Fraction of host cations to replace
         host_cation : str
-            Cation to replace (default: "Ce")
+            Cation to replace (e.g., "Ce", "Zr", "Hf", "Th")
         vacancy_placement : str
-            Vacancy placement strategy
+            Vacancy placement strategy ("random", "surface", "bulk", "near_dopant")
         dopant_placement : str
-            Dopant placement strategy
+            Dopant placement strategy ("random", "surface", "bulk")
         dopant_preference : float
-            Dopant placement preference strength
+            Dopant placement preference strength (0.5-1.0)
         vacancy_preference : float
-            Vacancy placement preference strength
-        pr_trivalent_fraction : float
-            For Pr/Tb: fraction that is M³⁺
+            Vacancy placement preference strength (0.5-1.0)
+        trivalent_fraction : float
+            For Pr/Tb: fraction that is M³⁺ (default: 1.0)
         z_threshold : float
-            Fraction of slab considered surface
+            Fraction of slab considered surface (default: 0.3)
         random_seed : int, optional
-            Random seed
+            Random seed for reproducibility
 
         Returns
         -------
-        DopedCeriaStructure
-            New doped ceria structure
+        DopedFluoriteStructure
+            New doped fluorite structure
+
+        Examples
+        --------
+        >>> # Create YSZ
+        >>> ysz = DopedFluoriteStructure.from_parent(
+        ...     zro2_slab,
+        ...     dopant="Y",
+        ...     dopant_fraction=0.08,
+        ...     host_cation="Zr",
+        ... )
+
+        >>> # Create GDC
+        >>> gdc = DopedFluoriteStructure.from_parent(
+        ...     ceo2_slab,
+        ...     dopant="Gd",
+        ...     dopant_fraction=0.10,
+        ...     host_cation="Ce",
+        ... )
         """
-        if isinstance(ceria, BaseStructure):
-            atoms = ceria.atoms.copy()
-            parent_formula = ceria.formula
+        if isinstance(parent, BaseStructure):
+            atoms = parent.atoms.copy()
+            parent_formula = parent.formula
         else:
-            atoms = ceria.copy()
+            atoms = parent.copy()
             parent_formula = atoms.get_chemical_formula()
 
         # Count original O atoms for vacancy tracking
@@ -713,7 +794,7 @@ class DopedCeriaStructure(BaseStructure):
             dopant_placement=dopant_placement,
             dopant_preference=dopant_preference,
             vacancy_preference=vacancy_preference,
-            pr_trivalent_fraction=pr_trivalent_fraction,
+            pr_trivalent_fraction=trivalent_fraction,
             z_threshold=z_threshold,
             random_seed=random_seed,
         )
@@ -727,14 +808,164 @@ class DopedCeriaStructure(BaseStructure):
             dopant=dopant,
             dopant_fraction=dopant_fraction,
             n_vacancies=n_vacancies,
+            host_cation=host_cation,
             parent_formula=parent_formula,
+        )
+
+    @classmethod
+    def from_ceria(
+        cls,
+        ceria: Union[Atoms, BaseStructure],
+        dopant: str,
+        dopant_fraction: float,
+        vacancy_placement: str = "random",
+        dopant_placement: str = "random",
+        dopant_preference: float = 0.7,
+        vacancy_preference: float = 0.7,
+        trivalent_fraction: float = 1.0,
+        z_threshold: float = 0.3,
+        random_seed: Optional[int] = None,
+        # Backwards compatibility alias
+        pr_trivalent_fraction: Optional[float] = None,
+    ) -> "DopedFluoriteStructure":
+        """
+        Create doped ceria from pristine CeO2 structure.
+
+        Convenience method for ceria-based materials (GDC, SDC, PDC, etc.).
+
+        Parameters
+        ----------
+        ceria : Atoms or BaseStructure
+            Parent CeO2 structure
+        dopant : str
+            Dopant element (e.g., "Gd", "Sm", "Pr", "Y")
+        dopant_fraction : float
+            Fraction of Ce to replace
+        vacancy_placement : str
+            Vacancy placement strategy
+        dopant_placement : str
+            Dopant placement strategy
+        dopant_preference : float
+            Dopant placement preference strength
+        vacancy_preference : float
+            Vacancy placement preference strength
+        trivalent_fraction : float
+            For Pr/Tb: fraction that is M³⁺ (default: 1.0)
+        z_threshold : float
+            Fraction of slab considered surface
+        random_seed : int, optional
+            Random seed
+        pr_trivalent_fraction : float, optional
+            Deprecated alias for trivalent_fraction
+
+        Returns
+        -------
+        DopedFluoriteStructure
+            New doped ceria structure
+        """
+        # Handle backwards compatibility alias
+        if pr_trivalent_fraction is not None:
+            import warnings
+            warnings.warn(
+                "pr_trivalent_fraction is deprecated, use trivalent_fraction instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            trivalent_fraction = pr_trivalent_fraction
+
+        return cls.from_parent(
+            parent=ceria,
+            dopant=dopant,
+            dopant_fraction=dopant_fraction,
+            host_cation="Ce",
+            vacancy_placement=vacancy_placement,
+            dopant_placement=dopant_placement,
+            dopant_preference=dopant_preference,
+            vacancy_preference=vacancy_preference,
+            trivalent_fraction=trivalent_fraction,
+            z_threshold=z_threshold,
+            random_seed=random_seed,
+        )
+
+    @classmethod
+    def from_zirconia(
+        cls,
+        zirconia: Union[Atoms, BaseStructure],
+        dopant: str,
+        dopant_fraction: float,
+        vacancy_placement: str = "random",
+        dopant_placement: str = "random",
+        dopant_preference: float = 0.7,
+        vacancy_preference: float = 0.7,
+        z_threshold: float = 0.3,
+        random_seed: Optional[int] = None,
+    ) -> "DopedFluoriteStructure":
+        """
+        Create doped zirconia from pristine ZrO2 structure.
+
+        Convenience method for zirconia-based materials (YSZ, ScSZ, CSZ, etc.).
+
+        Parameters
+        ----------
+        zirconia : Atoms or BaseStructure
+            Parent ZrO2 structure
+        dopant : str
+            Dopant element (e.g., "Y", "Sc", "Ca", "Mg")
+        dopant_fraction : float
+            Fraction of Zr to replace
+        vacancy_placement : str
+            Vacancy placement strategy
+        dopant_placement : str
+            Dopant placement strategy
+        dopant_preference : float
+            Dopant placement preference strength
+        vacancy_preference : float
+            Vacancy placement preference strength
+        z_threshold : float
+            Fraction of slab considered surface
+        random_seed : int, optional
+            Random seed
+
+        Returns
+        -------
+        DopedFluoriteStructure
+            New doped zirconia structure
+
+        Examples
+        --------
+        >>> # Create YSZ (8 mol% Y2O3)
+        >>> ysz = DopedFluoriteStructure.from_zirconia(
+        ...     zro2_slab,
+        ...     dopant="Y",
+        ...     dopant_fraction=0.08,
+        ... )
+
+        >>> # Create ScSZ
+        >>> scsz = DopedFluoriteStructure.from_zirconia(
+        ...     zro2_slab,
+        ...     dopant="Sc",
+        ...     dopant_fraction=0.10,
+        ... )
+        """
+        return cls.from_parent(
+            parent=zirconia,
+            dopant=dopant,
+            dopant_fraction=dopant_fraction,
+            host_cation="Zr",
+            vacancy_placement=vacancy_placement,
+            dopant_placement=dopant_placement,
+            dopant_preference=dopant_preference,
+            vacancy_preference=vacancy_preference,
+            trivalent_fraction=1.0,  # No mixed valence for Zr dopants typically
+            z_threshold=z_threshold,
+            random_seed=random_seed,
         )
 
     def get_stoichiometry(self) -> Dict[str, float]:
         """
         Calculate the stoichiometry relative to total cation sites.
 
-        For Ce₁₋ₓGdₓO₂₋δ, returns ratios relative to cation sites.
+        For Ce₁₋ₓGdₓO₂₋δ or Zr₁₋ₓYₓO₂₋δ, returns ratios relative to cation sites.
 
         Returns
         -------
@@ -745,8 +976,8 @@ class DopedCeriaStructure(BaseStructure):
         for symbol in self.atoms.get_chemical_symbols():
             counts[symbol] = counts.get(symbol, 0) + 1
 
-        # Sum cation counts (Ce + dopants)
-        cation_elements = ["Ce", "Zr"] + list(ACCEPTOR_DOPANTS.keys())
+        # Sum cation counts (host + dopants)
+        cation_elements = list(HOST_CATIONS.keys()) + list(ACCEPTOR_DOPANTS.keys())
         total_cations = sum(counts.get(c, 0) for c in cation_elements)
 
         if total_cations == 0:
@@ -756,32 +987,104 @@ class DopedCeriaStructure(BaseStructure):
 
         return stoich
 
-    def get_dopant_name(self) -> str:
+    def get_material_name(self) -> str:
         """
-        Get the full name of the doped material.
+        Get the conventional name of the doped material.
 
         Returns
         -------
         str
-            Material name (e.g., "GDC", "SDC", "PDC")
+            Material name (e.g., "GDC", "YSZ", "ScSZ")
         """
-        dopant_names = {
-            "Gd": "GDC",  # Gadolinium-doped Ceria
-            "Sm": "SDC",  # Samarium-doped Ceria
-            "Pr": "PDC",  # Praseodymium-doped Ceria
-            "Y": "YDC",   # Yttrium-doped Ceria
-            "La": "LDC",  # Lanthanum-doped Ceria
-            "Nd": "NDC",  # Neodymium-doped Ceria
-            "Tb": "TDC",  # Terbium-doped Ceria
-        }
-        return dopant_names.get(self.dopant, f"{self.dopant}-doped Ceria")
+        # Look up in the material names dictionary
+        key = (self.host_cation, self.dopant)
+        if key in FLUORITE_MATERIAL_NAMES:
+            return FLUORITE_MATERIAL_NAMES[key]
+
+        # Fallback to descriptive name
+        host_info = HOST_CATIONS.get(self.host_cation, {})
+        host_name = host_info.get("name", self.host_cation)
+        oxide_name = host_info.get("oxide", f"{self.host_cation}O2")
+        return f"{self.dopant}-doped {oxide_name}"
+
+    def get_dopant_name(self) -> str:
+        """
+        Get the conventional name of the doped material.
+
+        .. deprecated::
+            Use ``get_material_name()`` instead.
+
+        Returns
+        -------
+        str
+            Material name (e.g., "GDC", "YSZ", "ScSZ")
+        """
+        import warnings
+        warnings.warn(
+            "get_dopant_name() is deprecated, use get_material_name() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_material_name()
 
     def __repr__(self) -> str:
         return (
-            f"DopedCeriaStructure({self.get_dopant_name()}, "
+            f"DopedFluoriteStructure({self.get_material_name()}, "
             f"{self.dopant}_frac={self.dopant_fraction:.1%}, "
             f"n_vac={self.n_vacancies})"
         )
+
+
+def DopedCeriaStructure(
+    atoms: Atoms,
+    dopant: str,
+    dopant_fraction: float,
+    n_vacancies: int,
+    parent_formula: Optional[str] = None,
+) -> DopedFluoriteStructure:
+    """
+    Create a DopedFluoriteStructure for ceria-based materials.
+
+    .. deprecated::
+        Use ``DopedFluoriteStructure`` directly instead.
+        This function is kept for backwards compatibility.
+
+    Parameters
+    ----------
+    atoms : Atoms
+        ASE Atoms object
+    dopant : str
+        Dopant element symbol
+    dopant_fraction : float
+        Fraction of host cations replaced
+    n_vacancies : int
+        Number of oxygen vacancies created
+    parent_formula : str, optional
+        Original ceria formula
+
+    Returns
+    -------
+    DopedFluoriteStructure
+        New doped fluorite structure with host_cation="Ce"
+    """
+    import warnings
+    warnings.warn(
+        "DopedCeriaStructure is deprecated, use DopedFluoriteStructure instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return DopedFluoriteStructure(
+        atoms=atoms,
+        dopant=dopant,
+        dopant_fraction=dopant_fraction,
+        n_vacancies=n_vacancies,
+        host_cation="Ce",
+        parent_formula=parent_formula,
+    )
+
+
+# Attach class methods to the function for backwards compatibility
+DopedCeriaStructure.from_ceria = DopedFluoriteStructure.from_ceria
 
 
 def analyze_dopant_distribution(

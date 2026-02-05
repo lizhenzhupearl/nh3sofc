@@ -29,7 +29,8 @@ from .exsolution import (
 )
 from .dopants import (
     DopantBuilder,
-    DopedCeriaStructure,
+    DopedFluoriteStructure,
+    DopedCeriaStructure,  # Deprecated alias for backwards compatibility
     analyze_dopant_distribution,
     generate_dopant_series,
     print_dopant_analysis,
@@ -65,7 +66,8 @@ __all__ = [
     "create_metallic_cluster",
     # Dopants
     "DopantBuilder",
-    "DopedCeriaStructure",
+    "DopedFluoriteStructure",
+    "DopedCeriaStructure",  # Deprecated alias
     "analyze_dopant_distribution",
     "generate_dopant_series",
     "print_dopant_analysis",

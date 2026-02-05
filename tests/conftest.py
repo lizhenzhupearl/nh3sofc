@@ -75,3 +75,25 @@ def ceo2_slab():
     positions[:, 2] += 7.5
     supercell.set_positions(positions)
     return supercell
+
+
+@pytest.fixture
+def zro2_slab():
+    """Create a ZrO2 slab-like structure for dopant testing (YSZ, ScSZ).
+
+    Creates a 2x2x2 fluorite supercell with vacuum to mimic a slab.
+    Contains 8 Zr and 16 O atoms.
+    """
+    # Start with ZrO2 bulk (cubic fluorite phase)
+    zro2 = bulk('ZrO2', 'fluorite', a=5.07)
+    # Create 2x2x2 supercell
+    supercell = zro2 * (2, 2, 2)
+    # Add vacuum in z-direction to make it slab-like
+    cell = supercell.cell.copy()
+    cell[2, 2] += 15.0  # Add 15 A vacuum
+    supercell.set_cell(cell)
+    # Shift atoms to center in z
+    positions = supercell.get_positions()
+    positions[:, 2] += 7.5
+    supercell.set_positions(positions)
+    return supercell
