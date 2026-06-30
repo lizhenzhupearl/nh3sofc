@@ -1,0 +1,84 @@
+{
+  "features": [
+    {
+      "id": "feat-001",
+      "name": "Project Baseline Verification",
+      "description": "Project installs cleanly, all tests pass, import smoke checks succeed, init.sh runs without errors",
+      "dependencies": [],
+      "status": "passing",
+      "evidence": "pytest tests/ -v passes; import smoke checks pass; init.sh runs clean"
+    },
+    {
+      "id": "feat-002",
+      "name": "Structure Generation Pipeline",
+      "description": "Bulk, surface, defect, adsorbate, and dopant modules produce valid ASE Atoms objects for Ni, perovskite, and fluorite systems",
+      "dependencies": ["feat-001"],
+      "status": "passing",
+      "evidence": "Modules implemented: bulk.py, surface.py, adsorbates.py, defects.py, dopants.py, decomposition.py, exsolution.py. Tests in test_smoke.py cover imports and instantiation."
+    },
+    {
+      "id": "feat-003",
+      "name": "VASP Calculator Interface",
+      "description": "VASPInputGenerator produces correct INCAR/KPOINTS/POSCAR for relaxation, frequency, and NEB workflows",
+      "dependencies": ["feat-001"],
+      "status": "passing",
+      "evidence": "VASPInputGenerator importable and tested in CI lint job"
+    },
+    {
+      "id": "feat-004",
+      "name": "Analysis and Thermochemistry",
+      "description": "Energetics, thermochemistry, microkinetic, RDS, and surface comparison modules provide post-processing for DFT results",
+      "dependencies": ["feat-002", "feat-003"],
+      "status": "passing",
+      "evidence": "Modules implemented: energetics.py, thermochemistry.py, microkinetic.py, rds.py, surface_comparison.py, electronic.py"
+    },
+    {
+      "id": "feat-005",
+      "name": "Doped Fluorite Electrolytes (GDC/YSZ/ScSZ)",
+      "description": "Dopant module supports multiple fluorite hosts and dopant species with correct charge compensation",
+      "dependencies": ["feat-002"],
+      "status": "passing",
+      "evidence": "Generalized in commit ea26b63; tutorial at tutorials/doped_fluorite.md; analyze_dopant_distribution generalized with host_cation param, 7 regression tests; ce_total backward-compat alias added for Ce hosts"
+    },
+    {
+      "id": "feat-006",
+      "name": "Audit: nh3sofc/structure/ (8 files)",
+      "description": "Audit structure subpackage for bugs, type inconsistencies, and lint issues. Scope: bulk.py, surface.py, adsorbates.py, defects.py, dopants.py, decomposition.py, exsolution.py, __init__.py. Oracle: mypy clean, no logic bugs, no unit/sign errors, tests pass.",
+      "dependencies": ["feat-001"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-007",
+      "name": "Audit: nh3sofc/calculators/ (8 files)",
+      "description": "Audit calculators subpackage (vasp + mace) for bugs, type inconsistencies, and lint issues. Oracle: mypy clean, VASP input generation logic correct, tests pass.",
+      "dependencies": ["feat-001"],
+      "status": "passing",
+      "evidence": "Fixed 5 bugs (INCAR case mismatch, Hubbard U f-orbital, VDW key case, cm-1 conversion, is_converged false positive), 4 lint issues, 1 API inconsistency. 12 regression tests added. 83 tests pass. Commit d6dd99c."
+    },
+    {
+      "id": "feat-008",
+      "name": "Audit: nh3sofc/analysis/ (8 files)",
+      "description": "Audit analysis subpackage for bugs, unit/sign errors, and type inconsistencies. Scope: energetics.py, thermochemistry.py, microkinetic.py, rds.py, surface_comparison.py, electronic.py, exsolution.py. Oracle: mypy clean, no unit/sign/normalization bugs, tests pass.",
+      "dependencies": ["feat-001"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-009",
+      "name": "Audit: nh3sofc/workflows/ (7 files)",
+      "description": "Audit workflows subpackage for bugs, type inconsistencies, and lint issues. Scope: relaxation.py, neb.py, frequency.py, decomposition.py, screening.py, exsolution.py. Oracle: mypy clean, no logic bugs, tests pass.",
+      "dependencies": ["feat-001"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-010",
+      "name": "Audit: nh3sofc/database/ + core/ (7 files)",
+      "description": "Audit database and core subpackages for bugs, type inconsistencies, and lint issues. Oracle: mypy clean, no logic bugs, tests pass.",
+      "dependencies": ["feat-001"],
+      "status": "not-started",
+      "evidence": ""
+    }
+  ]
+}
