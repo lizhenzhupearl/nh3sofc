@@ -4,8 +4,7 @@ Provides tools for calculating thermodynamic properties including
 ZPE, entropy, enthalpy, and Gibbs free energy at various temperatures.
 """
 
-from pathlib import Path
-from typing import Optional, List, Union, Dict, Any, Tuple
+from typing import Optional, List, Dict, Tuple
 import numpy as np
 
 from ..core.constants import KB_EV, H_EV_S, C_CMS, EV_TO_J, AVOGADRO

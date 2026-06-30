@@ -36,6 +36,7 @@ Examples
 ... )
 """
 
+import warnings
 from pathlib import Path
 from typing import Optional, List, Union, Tuple, Dict, Any, TYPE_CHECKING
 
@@ -1090,6 +1091,7 @@ DopedCeriaStructure.from_ceria = DopedFluoriteStructure.from_ceria
 def analyze_dopant_distribution(
     atoms: Atoms,
     dopant: str,
+    host_cation: str = "Ce",
     reference_atoms: Optional[Atoms] = None,
     z_threshold: float = 0.3,
     near_dopant_cutoff: float = 3.5,
@@ -1102,7 +1104,10 @@ def analyze_dopant_distribution(
     atoms : Atoms
         Doped structure to analyze
     dopant : str
-        Dopant element symbol (e.g., "Gd", "Sm")
+        Dopant element symbol (e.g., "Gd", "Sm", "Y")
+    host_cation : str
+        Host cation element symbol (e.g., "Ce" for ceria, "Zr" for zirconia).
+        Default: "Ce"
     reference_atoms : Atoms, optional
         Original structure before doping (to count vacancies)
     z_threshold : float
@@ -1118,7 +1123,9 @@ def analyze_dopant_distribution(
         - dopant_surface: dopants in surface region
         - dopant_surface_fraction: fraction of dopants in surface region
         - dopant_bulk: dopants in bulk region
-        - ce_total: total Ce atoms remaining
+        - host_cation: host cation element symbol
+        - host_total: total host cation atoms remaining
+        - ce_total: (deprecated) alias for host_total when host_cation="Ce"
         - o_total: total O atoms
         - vacancy_total: total vacancies (if reference provided)
         - vacancy_surface: vacancies in surface region
@@ -1130,6 +1137,8 @@ def analyze_dopant_distribution(
     >>> stats = analyze_dopant_distribution(gdc, dopant="Gd", reference_atoms=ceo2)
     >>> print(f"Gd in surface: {stats['dopant_surface_fraction']:.1%}")
     >>> print(f"Vacancies near Gd: {stats['vacancy_near_dopant_fraction']:.1%}")
+    >>> # For YSZ (yttria-stabilized zirconia):
+    >>> stats = analyze_dopant_distribution(ysz, dopant="Y", host_cation="Zr")
     """
     symbols = atoms.get_chemical_symbols()
     positions = atoms.get_positions()
@@ -1141,7 +1150,7 @@ def analyze_dopant_distribution(
 
     # Get indices by element
     dopant_indices = [i for i, s in enumerate(symbols) if s == dopant]
-    ce_indices = [i for i, s in enumerate(symbols) if s == "Ce"]
+    host_indices = [i for i, s in enumerate(symbols) if s == host_cation]
     o_indices = [i for i, s in enumerate(symbols) if s == "O"]
 
     # Count dopants in surface vs bulk
@@ -1154,14 +1163,19 @@ def analyze_dopant_distribution(
         "dopant_surface": len(dopant_surface),
         "dopant_bulk": len(dopant_bulk),
         "dopant_surface_fraction": len(dopant_surface) / len(dopant_indices) if dopant_indices else 0,
-        "ce_total": len(ce_indices),
+        "host_cation": host_cation,
+        "host_total": len(host_indices),
         "o_total": len(o_indices),
         "z_threshold": z_threshold,
         "z_cutoff": z_cutoff,
     }
 
+    # Backward compatibility: include 'ce_total' when host is Ce
+    if host_cation == "Ce":
+        results["ce_total"] = len(host_indices)
+
     # Calculate dopant fraction
-    total_cations = len(dopant_indices) + len(ce_indices)
+    total_cations = len(dopant_indices) + len(host_indices)
     if total_cations > 0:
         results["dopant_fraction"] = len(dopant_indices) / total_cations
     else:
@@ -1330,8 +1344,10 @@ def print_dopant_analysis(
     if "dopant_fraction" in stats:
         print(f"  Dopant fraction: {stats['dopant_fraction']*100:.1f}%")
 
+    host = stats.get("host_cation", "Ce")
+    host_total = stats.get("host_total", stats.get("ce_total", "?"))
     print(f"\nHost Cations:")
-    print(f"  Ce atoms remaining: {stats['ce_total']}")
+    print(f"  {host} atoms remaining: {host_total}")
     print(f"  O atoms: {stats['o_total']}")
 
     if "vacancy_total" in stats:

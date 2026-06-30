@@ -11,18 +11,19 @@ EV_TO_J = 1.602176634e-19  # eV to J conversion
 C_CMS = 2.99792458e10     # Speed of light in cm/s
 
 # Default VASP parameters
+# Keys MUST be uppercase to match VASP INCAR convention and CALC_PRESETS
 DEFAULT_VASP_PARAMS = {
-    "encut": 520,           # Plane-wave cutoff (eV)
-    "ediff": 1e-6,          # Electronic convergence (eV)
-    "ediffg": -0.02,        # Force convergence (eV/A)
-    "ismear": 0,            # Gaussian smearing for insulators
-    "sigma": 0.05,          # Smearing width (eV)
-    "kspacing": 0.03,       # K-point spacing (1/A)
-    "ispin": 2,             # Spin-polarized
-    "lorbit": 11,           # Write DOSCAR and lm-decomposed PROCAR
-    "lwave": False,         # Don't write WAVECAR
-    "lcharg": False,        # Don't write CHGCAR
-    "ncore": 4,             # Parallelization
+    "ENCUT": 520,           # Plane-wave cutoff (eV)
+    "EDIFF": 1e-6,          # Electronic convergence (eV)
+    "EDIFFG": -0.02,        # Force convergence (eV/A)
+    "ISMEAR": 0,            # Gaussian smearing for insulators
+    "SIGMA": 0.05,          # Smearing width (eV)
+    "KSPACING": 0.03,       # K-point spacing (1/A)
+    "ISPIN": 2,             # Spin-polarized
+    "LORBIT": 11,           # Write DOSCAR and lm-decomposed PROCAR
+    "LWAVE": False,         # Don't write WAVECAR
+    "LCHARG": False,        # Don't write CHGCAR
+    "NCORE": 4,             # Parallelization
 }
 
 # Hubbard U values for transition metals (eV)
@@ -48,12 +49,13 @@ DEFAULT_SURFACE_PARAMS = {
 }
 
 # Van der Waals correction methods
+# Keys inside each dict MUST be uppercase to match VASP INCAR convention
 VDW_METHODS = {
-    "D3": {"ivdw": 11},           # DFT-D3 (zero damping)
-    "D3BJ": {"ivdw": 12},         # DFT-D3 with BJ damping
-    "D4": {"ivdw": 13},           # DFT-D4 (if available)
-    "TS": {"ivdw": 20},           # Tkatchenko-Scheffler
-    "TSHIRSH": {"ivdw": 21},      # TS with Hirshfeld partitioning
+    "D3": {"IVDW": 11},           # DFT-D3 (zero damping)
+    "D3BJ": {"IVDW": 12},         # DFT-D3 with BJ damping
+    "D4": {"IVDW": 13},           # DFT-D4 (if available)
+    "TS": {"IVDW": 20},           # Tkatchenko-Scheffler
+    "TSHIRSH": {"IVDW": 21},      # TS with Hirshfeld partitioning
 }
 
 # Common adsorbate molecules and their properties

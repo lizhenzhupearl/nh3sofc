@@ -77,11 +77,10 @@ class AdsorbatePlacer:
         """
         try:
             mol = molecule(name)
-        except KeyError:
-            # Try common variations
-            name_map = {"NH2": "NH2", "NH": "NH", "OH": "OH"}
-            if name in name_map:
-                mol = molecule(name_map[name])
+        except (KeyError, ValueError):
+            # Try single-atom species (e.g., "N", "H", "O")
+            if len(name) <= 2 and name.isalpha():
+                mol = Atoms(name, positions=[[0, 0, 0]])
             else:
                 raise ValueError(f"Unknown molecule: {name}")
         return mol

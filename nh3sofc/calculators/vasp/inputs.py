@@ -9,11 +9,9 @@ from pathlib import Path
 from typing import Optional, List, Union, Dict, Any
 import numpy as np
 from ase import Atoms
-from ase.io import write as ase_write
 
 from ...core.constants import (
     DEFAULT_VASP_PARAMS,
-    HUBBARD_U,
     VDW_METHODS,
 )
 
@@ -115,6 +113,9 @@ class VASPInputGenerator:
         self.work_dir = Path(work_dir)
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
+        # Initialize k-point mesh (None = use KSPACING or default)
+        self._kpoints_mesh = None
+
         # Initialize INCAR parameters
         self.incar_params = DEFAULT_VASP_PARAMS.copy()
 
@@ -171,9 +172,19 @@ class VASPInputGenerator:
             if "KSPACING" in self.incar_params:
                 del self.incar_params["KSPACING"]
 
+    # Elements with f-electrons that need LDAUL=3 (not 2)
+    F_ELECTRON_ELEMENTS = {
+        "Ce", "La", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd",
+        "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu",  # Lanthanides
+        "Ac", "Th", "Pa", "U", "Np", "Pu", "Am",     # Actinides
+    }
+
     def set_hubbard_u(self, u_values: Dict[str, float]) -> None:
         """
         Set Hubbard U parameters.
+
+        Automatically selects d-orbital (LDAUL=2) or f-orbital (LDAUL=3)
+        based on element type. Sets LMAXMIX=6 when f-electrons are present.
 
         Parameters
         ----------
@@ -191,10 +202,15 @@ class VASPInputGenerator:
         ldaul = []
         ldauu = []
         ldauj = []
+        has_f_electrons = False
 
         for elem in unique_elements:
             if elem in u_values and u_values[elem] > 0:
-                ldaul.append(2)  # d-orbitals
+                if elem in self.F_ELECTRON_ELEMENTS:
+                    ldaul.append(3)  # f-orbitals
+                    has_f_electrons = True
+                else:
+                    ldaul.append(2)  # d-orbitals
                 ldauu.append(u_values[elem])
                 ldauj.append(0)
             else:
@@ -208,7 +224,7 @@ class VASPInputGenerator:
         self.incar_params["LDAUU"] = " ".join(map(str, ldauu))
         self.incar_params["LDAUJ"] = " ".join(map(str, ldauj))
         self.incar_params["LDAUPRINT"] = 1
-        self.incar_params["LMAXMIX"] = 4
+        self.incar_params["LMAXMIX"] = 6 if has_f_electrons else 4
 
     def set_vdw(self, method: str) -> None:
         """
@@ -329,7 +345,7 @@ class VASPInputGenerator:
         str
             KPOINTS file content
         """
-        if hasattr(self, "_kpoints_mesh") and self._kpoints_mesh is not None:
+        if self._kpoints_mesh is not None:
             kpts = self._kpoints_mesh
         elif kspacing is not None or "KSPACING" in self.incar_params:
             # Auto-generate from spacing

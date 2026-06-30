@@ -290,9 +290,37 @@ class TestDopantModule:
 
         assert stats["dopant"] == "Gd"
         assert stats["dopant_total"] == 2
+        assert stats["host_cation"] == "Ce"
+        assert stats["host_total"] == 6  # 8 - 2
         assert stats["vacancy_total"] == 1
         assert "dopant_surface_fraction" in stats
         assert "vacancy_near_dopant_fraction" in stats
+
+    def test_analyze_dopant_distribution_ysz(self, zro2_slab):
+        """Test dopant distribution analysis for YSZ (non-Ce host)."""
+        from nh3sofc.structure import DopantBuilder, analyze_dopant_distribution
+
+        builder = DopantBuilder(zro2_slab)
+        ysz = builder.create_doped_structure(
+            dopant="Y",
+            dopant_fraction=0.25,
+            host_cation="Zr",
+            random_seed=42,
+        )
+
+        stats = analyze_dopant_distribution(
+            ysz,
+            dopant="Y",
+            host_cation="Zr",
+            reference_atoms=zro2_slab,
+        )
+
+        assert stats["dopant"] == "Y"
+        assert stats["dopant_total"] == 2
+        assert stats["host_cation"] == "Zr"
+        assert stats["host_total"] == 6
+        assert stats["vacancy_total"] == 1
+        assert "dopant_surface_fraction" in stats
 
     def test_generate_dopant_series_deprecated(self, ceo2_slab):
         """Test deprecated generate_dopant_series (backwards compatibility)."""

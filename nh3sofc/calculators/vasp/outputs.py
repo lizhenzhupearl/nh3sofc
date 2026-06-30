@@ -47,6 +47,11 @@ class VASPOutputParser:
         """
         Check if the calculation converged.
 
+        For relaxations (NSW > 0): checks for ionic convergence
+        ("reached required accuracy").
+        For static calculations (NSW = 0): checks that the calculation
+        completed normally.
+
         Returns
         -------
         bool
@@ -58,13 +63,16 @@ class VASPOutputParser:
         with open(self.outcar_path, "r") as f:
             content = f.read()
 
-        # Check for ionic convergence
+        # Check for ionic convergence (relaxation/optimization)
         if "reached required accuracy" in content:
             return True
 
-        # Check for electronic convergence on last ionic step
-        if "EDIFF is reached" in content:
-            return True
+        # For static calculations (NSW=0): no ionic convergence marker
+        # exists. Check that the job completed normally instead.
+        if "General timing and accounting" in content:
+            n_ionic = content.count("- Iteration")
+            if n_ionic <= 1:
+                return True
 
         return False
 

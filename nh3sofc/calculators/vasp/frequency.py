@@ -12,8 +12,7 @@ import numpy as np
 from ase import Atoms
 
 from .inputs import VASPInputGenerator
-from .outputs import VASPOutputParser
-from ...core.constants import KB_EV, H_EV_S
+from ...core.constants import KB_EV, H_EV_S, C_CMS
 
 
 class FrequencyCalculation:
@@ -218,7 +217,8 @@ class FrequencyCalculation:
         ndarray
             Frequencies in eV
         """
-        cm1_to_ev = 1.23981e-4  # 1 cm^-1 in eV
+        # 1 cm^-1 = h * c (in eV): h (eV*s) * c (cm/s) = eV*cm
+        cm1_to_ev = H_EV_S * C_CMS  # ~1.23984e-4 eV per cm^-1
         return self.get_frequencies(include_imaginary) * cm1_to_ev
 
     def get_zpe(self) -> float:

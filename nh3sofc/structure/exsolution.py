@@ -770,7 +770,20 @@ def _build_hemispherical_cluster(metal: str, n_atoms: int, bond_length: float) -
             y = bond_length * 2.0 * np.sin(angle)
             positions.append([x, y, 0])
 
-    positions = positions[:n_atoms]
+    # If we have more positions than needed, truncate
+    if len(positions) >= n_atoms:
+        positions = positions[:n_atoms]
+    else:
+        # Fill remaining positions for intermediate sizes (e.g., 2, 3, 5, 6, 8, 9)
+        while len(positions) < n_atoms:
+            n_existing = len(positions)
+            angle = n_existing * 2 * np.pi / 5
+            r = bond_length * (0.8 + 0.3 * (n_existing % 3))
+            z = bond_length * 0.4 * ((n_existing - 1) % 2)
+            x = r * np.cos(angle)
+            y = r * np.sin(angle)
+            positions.append([x, y, z])
+
     return Atoms(metal * len(positions), positions=positions)
 
 

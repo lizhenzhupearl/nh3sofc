@@ -4,8 +4,7 @@ Provides tools for calculating adsorption energies, surface energies,
 and related thermodynamic quantities.
 """
 
-from pathlib import Path
-from typing import Optional, List, Union, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple
 import numpy as np
 from ase import Atoms
 from ase.io import read as ase_read
@@ -156,9 +155,21 @@ class SurfaceEnergyCalculator:
         """
         self.e_bulk_per_atom = e_bulk_per_atom
 
-    def set_bulk_energy(self, energy: float, per_atom: bool = True) -> None:
-        """Set bulk reference energy."""
-        self.e_bulk_per_atom = energy if per_atom else None
+    def set_bulk_energy(
+        self, energy: float, per_atom: bool = True, n_atoms: int = 1
+    ) -> None:
+        """Set bulk reference energy.
+
+        Parameters
+        ----------
+        energy : float
+            Bulk energy in eV
+        per_atom : bool
+            If True, energy is already per-atom. If False, divide by n_atoms.
+        n_atoms : int
+            Number of atoms in the bulk cell (used when per_atom=False)
+        """
+        self.e_bulk_per_atom = energy if per_atom else energy / n_atoms
 
     def calculate(
         self,

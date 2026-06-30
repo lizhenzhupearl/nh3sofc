@@ -8,8 +8,7 @@ Provides tools for analyzing exsolution processes:
 - Comparison with clean surface catalysis
 """
 
-from pathlib import Path
-from typing import Optional, List, Union, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple
 import numpy as np
 
 from ..core.constants import (

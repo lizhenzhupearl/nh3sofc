@@ -928,3 +928,565 @@ class TestAddOnSiteSurfaceValidation:
             nh3_z = config.positions[-4:, 2].min()  # NH3 is last 4 atoms
             assert nh3_z > z_cutoff, \
                 f"Adsorbate placed below surface: z={nh3_z:.2f} < cutoff={z_cutoff:.2f}"
+
+
+class TestAnalyzeDopantDistributionHostCation:
+    """
+    Bug: analyze_dopant_distribution() hardcoded "Ce" as the host cation,
+    making it impossible to analyze non-ceria fluorites (YSZ, ScSZ, etc.).
+    The return dict always had 'ce_total' key even for zirconia structures,
+    and cation fraction calculations were wrong for non-Ce hosts.
+
+    Fix: Added host_cation parameter (default "Ce") to
+    analyze_dopant_distribution(). Renamed 'ce_total' to 'host_total'
+    in return dict and added 'host_cation' key. Updated
+    print_dopant_analysis() with backward-compatible fallback.
+
+    Date fixed: 2026-06-29
+    """
+
+    def test_host_total_replaces_ce_total(self, ceo2_slab):
+        """Return dict should have 'host_total' and 'ce_total' (deprecated alias) for Ce host."""
+        from nh3sofc.structure import DopantBuilder, analyze_dopant_distribution
+
+        builder = DopantBuilder(ceo2_slab)
+        gdc = builder.create_doped_structure(
+            dopant="Gd",
+            dopant_fraction=0.25,
+            random_seed=42,
+        )
+
+        stats = analyze_dopant_distribution(gdc, dopant="Gd")
+
+        # New key should exist
+        assert "host_total" in stats, "Missing 'host_total' key in results"
+        assert "host_cation" in stats, "Missing 'host_cation' key in results"
+        # Old key should also exist as deprecated alias for Ce host
+        assert "ce_total" in stats, "'ce_total' should be present as deprecated alias for Ce host"
+        assert stats["ce_total"] == stats["host_total"], "ce_total and host_total should match"
+
+    def test_default_host_cation_is_ce(self, ceo2_slab):
+        """Default host_cation should be 'Ce' for backward compatibility."""
+        from nh3sofc.structure import DopantBuilder, analyze_dopant_distribution
+
+        builder = DopantBuilder(ceo2_slab)
+        gdc = builder.create_doped_structure(
+            dopant="Gd",
+            dopant_fraction=0.25,
+            random_seed=42,
+        )
+
+        stats = analyze_dopant_distribution(gdc, dopant="Gd")
+
+        assert stats["host_cation"] == "Ce"
+        assert stats["host_total"] == 6  # 8 Ce - 2 Gd = 6 Ce remaining
+
+    def test_host_cation_zr_for_ysz(self, zro2_slab):
+        """analyze_dopant_distribution should work with Zr host for YSZ."""
+        from nh3sofc.structure import DopantBuilder, analyze_dopant_distribution
+
+        builder = DopantBuilder(zro2_slab)
+        ysz = builder.create_doped_structure(
+            dopant="Y",
+            dopant_fraction=0.25,
+            host_cation="Zr",
+            random_seed=42,
+        )
+
+        stats = analyze_dopant_distribution(
+            ysz, dopant="Y", host_cation="Zr",
+        )
+
+        assert stats["host_cation"] == "Zr"
+        assert stats["dopant"] == "Y"
+        assert stats["dopant_total"] == 2
+        assert stats["host_total"] == 6  # 8 Zr - 2 Y = 6 Zr remaining
+        # ce_total should NOT be present for non-Ce hosts
+        assert "ce_total" not in stats, "'ce_total' should not appear for Zr host"
+
+    def test_dopant_fraction_uses_host_cation(self, zro2_slab):
+        """Dopant fraction should be calculated against the specified host cation."""
+        from nh3sofc.structure import DopantBuilder, analyze_dopant_distribution
+
+        builder = DopantBuilder(zro2_slab)
+        ysz = builder.create_doped_structure(
+            dopant="Y",
+            dopant_fraction=0.25,
+            host_cation="Zr",
+            random_seed=42,
+        )
+
+        stats = analyze_dopant_distribution(
+            ysz, dopant="Y", host_cation="Zr",
+        )
+
+        # dopant_fraction = n_dopant / (n_dopant + n_host) = 2 / (2 + 6) = 0.25
+        assert abs(stats["dopant_fraction"] - 0.25) < 0.01, \
+            f"Expected dopant_fraction ~0.25, got {stats['dopant_fraction']}"
+
+    def test_wrong_host_cation_gives_zero(self, ceo2_slab):
+        """Using wrong host_cation should give 0 host atoms (catches misconfiguration)."""
+        from nh3sofc.structure import DopantBuilder, analyze_dopant_distribution
+
+        builder = DopantBuilder(ceo2_slab)
+        gdc = builder.create_doped_structure(
+            dopant="Gd",
+            dopant_fraction=0.25,
+            random_seed=42,
+        )
+
+        # Accidentally pass host_cation="Zr" for a ceria structure
+        stats = analyze_dopant_distribution(
+            gdc, dopant="Gd", host_cation="Zr",
+        )
+
+        assert stats["host_total"] == 0  # No Zr atoms in ceria
+        assert stats["host_cation"] == "Zr"
+
+    def test_print_dopant_analysis_backward_compat(self, ceo2_slab, capsys):
+        """print_dopant_analysis should handle both old and new stats dict formats."""
+        from nh3sofc.structure import print_dopant_analysis
+
+        # New format (from updated analyze_dopant_distribution)
+        new_stats = {
+            "dopant": "Gd",
+            "dopant_total": 2,
+            "dopant_surface": 1,
+            "dopant_bulk": 1,
+            "dopant_surface_fraction": 0.5,
+            "dopant_fraction": 0.25,
+            "host_cation": "Zr",
+            "host_total": 6,
+            "o_total": 15,
+            "z_threshold": 0.3,
+            "z_cutoff": 5.0,
+        }
+
+        print_dopant_analysis(new_stats, title="Test YSZ")
+        captured = capsys.readouterr()
+        assert "Zr atoms remaining: 6" in captured.out
+
+    def test_print_dopant_analysis_old_format_fallback(self, ceo2_slab, capsys):
+        """print_dopant_analysis should fall back to ce_total if host_total missing."""
+        from nh3sofc.structure import print_dopant_analysis
+
+        # Old format (pre-generalization)
+        old_stats = {
+            "dopant": "Gd",
+            "dopant_total": 2,
+            "dopant_surface": 1,
+            "dopant_bulk": 1,
+            "dopant_surface_fraction": 0.5,
+            "dopant_fraction": 0.25,
+            "ce_total": 6,
+            "o_total": 15,
+            "z_threshold": 0.3,
+            "z_cutoff": 5.0,
+        }
+
+        print_dopant_analysis(old_stats, title="Test Legacy")
+        captured = capsys.readouterr()
+        assert "Ce atoms remaining: 6" in captured.out
+
+
+# ============================================================
+# Structure Audit (feat-006) regression tests
+# ============================================================
+
+
+class TestHemisphericalClusterAtomCount:
+    """
+    Bug: _build_hemispherical_cluster() returned fewer atoms than requested
+    for intermediate sizes (2, 3, 5, 6, 8, 9, etc.) because positions were
+    only defined at shell breakpoints (1, 4, 7, 10, 13, 19).
+
+    Fix: Added fill logic for intermediate atom counts.
+    Date fixed: 2026-06-29
+    """
+
+    def test_cluster_has_correct_atom_count(self):
+        """Hemispherical cluster should always return exactly n_atoms."""
+        from nh3sofc.structure.exsolution import _build_hemispherical_cluster
+
+        for n in range(1, 20):
+            cluster = _build_hemispherical_cluster("Ni", n, bond_length=2.25)
+            assert len(cluster) == n, \
+                f"Requested {n} atoms but got {len(cluster)}"
+
+    def test_create_metallic_cluster_intermediate_sizes(self):
+        """create_metallic_cluster should work for all sizes 1-19."""
+        from nh3sofc.structure.exsolution import create_metallic_cluster
+
+        for n in range(1, 20):
+            cluster = create_metallic_cluster("Ni", n, shape="hemispherical")
+            assert len(cluster) == n
+            assert all(s == "Ni" for s in cluster.get_chemical_symbols())
+
+
+class TestGetMoleculeFallback:
+    """
+    Bug: AdsorbatePlacer._get_molecule() had a useless identity-mapping
+    fallback that would just re-raise the same KeyError.
+
+    Fix: Changed fallback to handle single-atom species directly.
+    Date fixed: 2026-06-29
+    """
+
+    def test_single_atom_species(self, simple_slab):
+        """Single atom species like 'N' and 'H' should work."""
+        from nh3sofc.structure import AdsorbatePlacer
+
+        placer = AdsorbatePlacer(simple_slab)
+        n_atom = placer._get_molecule("N")
+        assert len(n_atom) == 1
+        assert n_atom.get_chemical_symbols() == ["N"]
+
+        h_atom = placer._get_molecule("H")
+        assert len(h_atom) == 1
+        assert h_atom.get_chemical_symbols() == ["H"]
+
+    def test_unknown_molecule_raises(self, simple_slab):
+        """Unknown molecule names should raise ValueError."""
+        from nh3sofc.structure import AdsorbatePlacer
+
+        placer = AdsorbatePlacer(simple_slab)
+        with pytest.raises(ValueError, match="Unknown molecule"):
+            placer._get_molecule("XyzNotAMolecule")
+
+
+# ============================================================
+# Calculators Audit (feat-007) regression tests
+# ============================================================
+
+
+class TestINCARParameterCaseMismatch:
+    """
+    Bug: DEFAULT_VASP_PARAMS used lowercase keys while CALC_PRESETS used
+    uppercase, causing duplicate conflicting parameters in INCAR.
+
+    Fix: Changed all keys to uppercase.
+    Date fixed: 2026-06-29
+    """
+
+    def test_no_duplicate_incar_keys(self, simple_slab):
+        """INCAR should not have duplicate parameters (case-insensitive)."""
+        from nh3sofc.calculators.vasp import VASPInputGenerator
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vasp = VASPInputGenerator(
+                simple_slab, calc_type='frequency', work_dir=tmpdir
+            )
+            incar_content = vasp.generate_incar()
+
+            param_names = []
+            for line in incar_content.splitlines():
+                line = line.strip()
+                if '=' in line and not line.startswith('#'):
+                    param = line.split('=')[0].strip()
+                    param_names.append(param.upper())
+
+            assert len(param_names) == len(set(param_names)), \
+                f"Duplicate INCAR parameters: {[p for p in param_names if param_names.count(p) > 1]}"
+
+    def test_defaults_are_uppercase(self):
+        """DEFAULT_VASP_PARAMS keys should be uppercase."""
+        from nh3sofc.core.constants import DEFAULT_VASP_PARAMS
+
+        for key in DEFAULT_VASP_PARAMS:
+            assert key == key.upper(), \
+                f"DEFAULT_VASP_PARAMS key '{key}' should be uppercase"
+
+    def test_vdw_methods_are_uppercase(self):
+        """VDW_METHODS inner keys should be uppercase."""
+        from nh3sofc.core.constants import VDW_METHODS
+
+        for method, params in VDW_METHODS.items():
+            for key in params:
+                assert key == key.upper(), \
+                    f"VDW_METHODS['{method}'] key '{key}' should be uppercase"
+
+    def test_frequency_preset_no_ediff_clash(self, simple_slab):
+        """Frequency preset EDIFF should override default, not coexist."""
+        from nh3sofc.calculators.vasp import VASPInputGenerator
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vasp = VASPInputGenerator(
+                simple_slab, calc_type='frequency', work_dir=tmpdir
+            )
+            assert vasp.incar_params["EDIFF"] == 1e-7
+            assert "ediff" not in vasp.incar_params
+
+
+class TestHubbardUOrbitalAssignment:
+    """
+    Bug: set_hubbard_u() hardcoded LDAUL=2 (d-orbitals) for ALL elements.
+    Lanthanides need LDAUL=3 (f-orbitals) and LMAXMIX=6.
+
+    Fix: Automatic d/f-orbital selection based on element type.
+    Date fixed: 2026-06-29
+    """
+
+    def test_ce_gets_f_orbital(self):
+        """Ce with Hubbard U should use LDAUL=3 (f-orbital)."""
+        from nh3sofc.calculators.vasp import VASPInputGenerator
+        from ase import Atoms
+
+        atoms = Atoms('CeO2', positions=[[0, 0, 0], [1, 1, 0], [0, 1, 1]],
+                       cell=[5, 5, 5], pbc=True)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vasp = VASPInputGenerator(atoms, work_dir=tmpdir)
+            vasp.set_hubbard_u({"Ce": 5.0})
+
+            ldaul = vasp.incar_params["LDAUL"]
+            assert "3" in ldaul, \
+                f"Ce should have LDAUL=3 (f-orbital), got LDAUL={ldaul}"
+            assert vasp.incar_params["LMAXMIX"] == 6
+
+    def test_transition_metal_gets_d_orbital(self):
+        """V with Hubbard U should use LDAUL=2 (d-orbital)."""
+        from nh3sofc.calculators.vasp import VASPInputGenerator
+        from ase import Atoms
+
+        atoms = Atoms('VO2', positions=[[0, 0, 0], [1, 1, 0], [0, 1, 1]],
+                       cell=[5, 5, 5], pbc=True)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vasp = VASPInputGenerator(atoms, work_dir=tmpdir)
+            vasp.set_hubbard_u({"V": 3.25})
+
+            ldaul = vasp.incar_params["LDAUL"]
+            values = [int(x) for x in ldaul.split()]
+            assert 2 in values
+            assert 3 not in values
+            assert vasp.incar_params["LMAXMIX"] == 4
+
+    def test_mixed_d_and_f_elements(self):
+        """Mixed d/f-element system should assign correct orbitals."""
+        from nh3sofc.calculators.vasp import VASPInputGenerator
+        from ase import Atoms
+
+        atoms = Atoms('LaVO3',
+                       positions=[[0, 0, 0], [2, 0, 0], [1, 1, 0], [0, 1, 1], [1, 0, 1]],
+                       cell=[5, 5, 5], pbc=True)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vasp = VASPInputGenerator(atoms, work_dir=tmpdir)
+            vasp.sort_atoms_by_element()
+            vasp.set_hubbard_u({"La": 0.0, "V": 3.25})
+
+            ldaul = vasp.incar_params["LDAUL"]
+            values = [int(x) for x in ldaul.split()]
+            assert values == [-1, -1, 2]
+            assert vasp.incar_params["LMAXMIX"] == 4
+
+
+class TestCm1ToEvConversion:
+    """
+    Bug: Hardcoded cm-1 to eV factor 1.23981e-4 was slightly wrong
+    (correct: ~1.23984e-4) and not derived from physical constants.
+
+    Fix: Derive from H_EV_S * C_CMS.
+    Date fixed: 2026-06-29
+    """
+
+    def test_conversion_matches_physical_constants(self):
+        """cm-1 to eV factor should match h * c."""
+        from nh3sofc.core.constants import H_EV_S, C_CMS
+
+        expected = H_EV_S * C_CMS
+        nist_value = 4.135667696e-15 * 2.99792458e10
+        assert abs(expected - nist_value) / nist_value < 1e-10
+
+    def test_zpe_uses_correct_factor(self):
+        """ZPE calculation should use the constant-derived factor."""
+        from nh3sofc.calculators.vasp.frequency import FrequencyCalculation
+        from nh3sofc.core.constants import H_EV_S, C_CMS
+        from ase import Atoms
+
+        freq_calc = FrequencyCalculation(Atoms())
+        freq_calc.frequencies = np.array([1000.0, 2000.0, 3000.0])
+        freq_calc.imaginary = np.array([False, False, False])
+
+        cm1_to_ev = H_EV_S * C_CMS
+        expected_zpe = 0.5 * np.sum(np.array([1000.0, 2000.0, 3000.0]) * cm1_to_ev)
+        assert abs(freq_calc.get_zpe() - expected_zpe) < 1e-12
+
+
+class TestIsConvergedFalsePositive:
+    """
+    Bug: is_converged() returned True for unconverged relaxations that
+    hit NSW limit, because "EDIFF is reached" was used as a fallback.
+
+    Fix: Only use "reached required accuracy" for ionic convergence.
+    Date fixed: 2026-06-29
+    """
+
+    def test_unconverged_relaxation_is_not_converged(self):
+        """A relaxation that hit NSW limit should NOT be converged."""
+        from nh3sofc.calculators.vasp.outputs import VASPOutputParser
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            outcar = Path(tmpdir) / "OUTCAR"
+            outcar.write_text(
+                "EDIFF  is reached\n"
+                "- Iteration    1(   1)\n"
+                "- Iteration    2(   1)\n"
+                "- Iteration    3(   1)\n"
+                "General timing and accounting\n"
+            )
+            parser = VASPOutputParser(tmpdir)
+            assert not parser.is_converged()
+
+    def test_converged_relaxation_is_converged(self):
+        """A properly converged relaxation should return True."""
+        from nh3sofc.calculators.vasp.outputs import VASPOutputParser
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            outcar = Path(tmpdir) / "OUTCAR"
+            outcar.write_text(
+                "EDIFF  is reached\n"
+                "- Iteration    1(   1)\n"
+                "reached required accuracy\n"
+                "General timing and accounting\n"
+            )
+            parser = VASPOutputParser(tmpdir)
+            assert parser.is_converged()
+
+    def test_static_calc_converged(self):
+        """A completed static calculation should return True."""
+        from nh3sofc.calculators.vasp.outputs import VASPOutputParser
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            outcar = Path(tmpdir) / "OUTCAR"
+            outcar.write_text(
+                "EDIFF  is reached\n"
+                "- Iteration    1(   1)\n"
+                "General timing and accounting\n"
+            )
+            parser = VASPOutputParser(tmpdir)
+            assert parser.is_converged()
+
+
+# ============================================================
+# Analysis Audit (feat-008) regression tests
+# ============================================================
+
+
+class TestDOSCARLorbit11Parsing:
+    """
+    Bug: LORBIT=11 branch (len >= 10) was unreachable because LORBIT=10
+    branch (len >= 4) was checked first. LORBIT=11 data was silently
+    parsed as LORBIT=10, giving wrong p-DOS and d-DOS.
+
+    Fix: Reversed branch order to check >= 10 first.
+    Date fixed: 2026-06-30
+    """
+
+    def test_lorbit11_sums_p_orbitals(self, tmp_path):
+        """LORBIT=11 DOSCAR should sum py+pz+px for total p-DOS."""
+        from nh3sofc.analysis.electronic import DBandAnalyzer
+
+        nedos = 5
+        e_fermi = 0.0
+        lines = []
+        lines.append("1  1  0  0\n")
+        for _ in range(4):
+            lines.append("0.0 0.0 0.0\n")
+        lines.append(f"5.0 -5.0 {nedos} {e_fermi} 1.0\n")
+
+        energies = [-2.0, -1.0, 0.0, 1.0, 2.0]
+        for e in energies:
+            lines.append(f"{e} 1.0 0.0\n")
+
+        lines.append(f"5.0 -5.0 {nedos} {e_fermi} 1.0\n")
+
+        # LORBIT=11: energy s py pz px dxy dyz dz2 dxz dx2-y2
+        for e in energies:
+            lines.append(f"{e} 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9\n")
+
+        doscar_path = tmp_path / "DOSCAR"
+        doscar_path.write_text("".join(lines))
+
+        analyzer = DBandAnalyzer.from_doscar(str(doscar_path), atoms_to_parse=[0])
+
+        # p = py+pz+px = 0.2+0.3+0.4 = 0.9
+        p_dos = analyzer.dos_projected[0]["p"]
+        assert abs(p_dos[0] - 0.9) < 1e-10, f"p-DOS should be 0.9, got {p_dos[0]}"
+
+        # d = dxy+dyz+dz2+dxz+dx2 = 0.5+0.6+0.7+0.8+0.9 = 3.5
+        d_dos = analyzer.dos_projected[0]["d"]
+        assert abs(d_dos[0] - 3.5) < 1e-10, f"d-DOS should be 3.5, got {d_dos[0]}"
+
+    def test_lorbit10_still_works(self, tmp_path):
+        """LORBIT=10 DOSCAR (4 columns) should still parse correctly."""
+        from nh3sofc.analysis.electronic import DBandAnalyzer
+
+        nedos = 5
+        e_fermi = 0.0
+        lines = []
+        lines.append("1  1  0  0\n")
+        for _ in range(4):
+            lines.append("0.0 0.0 0.0\n")
+        lines.append(f"5.0 -5.0 {nedos} {e_fermi} 1.0\n")
+
+        energies = [-2.0, -1.0, 0.0, 1.0, 2.0]
+        for e in energies:
+            lines.append(f"{e} 1.0 0.0\n")
+
+        lines.append(f"5.0 -5.0 {nedos} {e_fermi} 1.0\n")
+
+        for e in energies:
+            lines.append(f"{e} 0.1 0.5 2.0\n")
+
+        doscar_path = tmp_path / "DOSCAR"
+        doscar_path.write_text("".join(lines))
+
+        analyzer = DBandAnalyzer.from_doscar(str(doscar_path), atoms_to_parse=[0])
+
+        assert abs(analyzer.dos_projected[0]["s"][0] - 0.1) < 1e-10
+        assert abs(analyzer.dos_projected[0]["p"][0] - 0.5) < 1e-10
+        assert abs(analyzer.dos_projected[0]["d"][0] - 2.0) < 1e-10
+
+
+class TestSetBulkEnergyNotPerAtom:
+    """
+    Bug: set_bulk_energy(per_atom=False) set e_bulk_per_atom to None.
+
+    Fix: Added n_atoms parameter; divides total energy by n_atoms.
+    Date fixed: 2026-06-30
+    """
+
+    def test_per_atom_false_stores_divided_energy(self):
+        """set_bulk_energy(per_atom=False) should divide by n_atoms."""
+        from nh3sofc.analysis.energetics import SurfaceEnergyCalculator
+
+        calc = SurfaceEnergyCalculator()
+        calc.set_bulk_energy(-20.0, per_atom=False, n_atoms=4)
+        assert calc.e_bulk_per_atom == -5.0
+
+    def test_per_atom_false_no_longer_sets_none(self):
+        """set_bulk_energy(per_atom=False) must not set None."""
+        from nh3sofc.analysis.energetics import SurfaceEnergyCalculator
+
+        calc = SurfaceEnergyCalculator()
+        calc.set_bulk_energy(-20.0, per_atom=False, n_atoms=4)
+        assert calc.e_bulk_per_atom is not None
+
+    def test_per_atom_true_unchanged(self):
+        """set_bulk_energy(per_atom=True) should store energy directly."""
+        from nh3sofc.analysis.energetics import SurfaceEnergyCalculator
+
+        calc = SurfaceEnergyCalculator()
+        calc.set_bulk_energy(-5.0, per_atom=True)
+        assert calc.e_bulk_per_atom == -5.0
+
+    def test_surface_energy_after_set_bulk_not_per_atom(self):
+        """calculate() should work after set_bulk_energy(per_atom=False)."""
+        from nh3sofc.analysis.energetics import SurfaceEnergyCalculator
+
+        calc = SurfaceEnergyCalculator()
+        calc.set_bulk_energy(-20.0, per_atom=False, n_atoms=4)
+
+        gamma = calc.calculate(e_slab=-200.0, n_atoms=40, area=50.0)
+        assert abs(gamma) < 1e-10

@@ -159,16 +159,16 @@ class DBandAnalyzer:
                         break
                     parts = lines[line_idx].split()
 
-                    if len(parts) >= 4:
-                        # At minimum: energy, s, p, d
-                        dos_s.append(float(parts[1]))
-                        dos_p.append(float(parts[2]))
-                        dos_d.append(float(parts[3]))
-                    elif len(parts) >= 10:
+                    if len(parts) >= 10:
                         # LORBIT=11 format: energy, s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2
                         dos_s.append(float(parts[1]))
                         dos_p.append(sum(float(parts[j]) for j in [2, 3, 4]))
                         dos_d.append(sum(float(parts[j]) for j in [5, 6, 7, 8, 9]))
+                    elif len(parts) >= 4:
+                        # LORBIT=10 format: energy, s, p, d
+                        dos_s.append(float(parts[1]))
+                        dos_p.append(float(parts[2]))
+                        dos_d.append(float(parts[3]))
 
                 if dos_s:
                     dos_projected[atom_idx] = {

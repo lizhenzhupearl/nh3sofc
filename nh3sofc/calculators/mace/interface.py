@@ -178,7 +178,7 @@ class MACECalculatorWrapper:
     def calculate(
         self,
         atoms: Atoms,
-        properties: List[str] = ["energy", "forces"],
+        properties: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Calculate properties for a structure.
@@ -187,14 +187,16 @@ class MACECalculatorWrapper:
         ----------
         atoms : Atoms
             Structure to calculate
-        properties : list
-            Properties to calculate
+        properties : list, optional
+            Properties to calculate (default: ["energy", "forces"])
 
         Returns
         -------
         dict
             Calculated properties
         """
+        if properties is None:
+            properties = ["energy", "forces"]
         calc = self.get_calculator()
         atoms_copy = atoms.copy()
         atoms_copy.calc = calc

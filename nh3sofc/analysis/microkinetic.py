@@ -4,7 +4,7 @@ Provides tools for steady-state analysis and turnover frequency
 calculations based on DFT-derived energetics.
 """
 
-from typing import Optional, List, Dict, Any, Tuple, Callable
+from typing import Optional, List, Dict, Any, Tuple
 import numpy as np
 from scipy.integrate import odeint
 from scipy.optimize import fsolve
@@ -660,7 +660,7 @@ def calculate_tof(
 def arrhenius_analysis(
     barriers: Dict[str, float],
     reaction_energies: Dict[str, float],
-    temperatures: List[float] = None,
+    temperatures: Optional[List[float]] = None,
 ) -> Dict[str, Any]:
     """
     Perform Arrhenius analysis over temperature range.
