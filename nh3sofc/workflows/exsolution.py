@@ -416,7 +416,7 @@ class ExsolutionWorkflow(BaseWorkflow):
         decomp_dir = self.work_dir / "nh3_decomposition"
 
         decomp_wf = DecompositionWorkflow(
-            atoms=exsolved_atoms,
+            nh3_on_slab=exsolved_atoms,
             work_dir=decomp_dir,
             calculator=self.calculator,
             **kwargs,

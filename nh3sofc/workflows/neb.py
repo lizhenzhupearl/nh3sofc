@@ -261,10 +261,6 @@ class NEBWorkflow(BaseWorkflow):
             queue=self.queue,
         )
 
-        # Modify for NEB (need MPI across images)
-        total_procs = self.nodes * self.ppn
-        procs_per_image = total_procs // (self.n_images + 2)
-
         pbs_path = pbs_script.write()
         files["PBS"] = pbs_path
 

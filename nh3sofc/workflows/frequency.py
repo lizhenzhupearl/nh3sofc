@@ -133,6 +133,9 @@ class FrequencyWorkflow(BaseWorkflow):
         self.temperature = temperature
         self.pressure = pressure
 
+        # MACE settings (not a constructor param but may be set externally)
+        self.mace_model = None
+
         # Results storage
         self.frequencies = None
         self.freq_calc = None
@@ -263,7 +266,7 @@ class FrequencyWorkflow(BaseWorkflow):
         from ase.vibrations import Vibrations
 
         # Load model
-        if hasattr(self, "mace_model") and self.mace_model:
+        if self.mace_model is not None:
             calc = MACECalculator(model_path=self.mace_model, device="cpu")
         else:
             try:
@@ -350,9 +353,11 @@ class FrequencyWorkflow(BaseWorkflow):
 
         T = temperature if temperature is not None else self.temperature
 
+        thermal = self.freq_calc.get_thermal_correction(T)
+
         return {
             "zpe": self.freq_calc.get_zpe(),
-            "thermal_correction": self.freq_calc.get_thermal_correction(T),
+            "thermal_correction": thermal,
             "entropy": self.freq_calc.get_vibrational_entropy(T),
             "helmholtz": self.freq_calc.get_helmholtz_energy(T),
         }
@@ -395,13 +400,12 @@ class FrequencyWorkflow(BaseWorkflow):
         else:
             E_elec = self.freq_calc.get_electronic_energy()
 
-        # Thermal corrections
-        zpe = self.freq_calc.get_zpe()
-        H_corr = self.freq_calc.get_thermal_correction(T)
-        S = self.freq_calc.get_vibrational_entropy(T)
+        # For surface species, use harmonic approximation:
+        # G ≈ A = E_elec + A_vib (Helmholtz, since no PV term)
+        # A_vib already includes ZPE + thermal contributions - TS
+        A_vib = self.freq_calc.get_helmholtz_energy(T)
 
-        # G = E + ZPE + H(T) - TS
-        G = E_elec + zpe + H_corr - T * S
+        G = E_elec + A_vib
 
         return G
 
@@ -426,8 +430,9 @@ class FrequencyWorkflow(BaseWorkflow):
         T = self.temperature
         try:
             thermal = self.get_thermal_corrections(T)
+            thermal_dict = thermal['thermal_correction']
             print(f"\nAt T = {T:.1f} K:")
-            print(f"  Thermal correction: {thermal['thermal_correction']:.4f} eV")
+            print(f"  Vibrational energy: {thermal_dict['E_vib']:.4f} eV")
             print(f"  Entropy (TS): {T * thermal['entropy']:.4f} eV")
             print(f"  Helmholtz energy: {thermal['helmholtz']:.4f} eV")
         except Exception as e:

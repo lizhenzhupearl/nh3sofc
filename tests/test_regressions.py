@@ -1490,3 +1490,195 @@ class TestSetBulkEnergyNotPerAtom:
 
         gamma = calc.calculate(e_slab=-200.0, n_atoms=40, area=50.0)
         assert abs(gamma) < 1e-10
+
+
+# ============================================================
+# Workflows Audit (feat-009) regression tests
+# ============================================================
+
+
+class TestFrequencyWorkflowGetGibbsEnergy:
+    """
+    Bug: get_gibbs_energy() used get_thermal_correction(T) which returns
+    a dict, in arithmetic that expects a float. TypeError on every call.
+
+    Fix: Use get_helmholtz_energy() which returns the correct scalar.
+    Date fixed: 2026-06-30
+    """
+
+    def test_get_gibbs_energy_returns_float(self):
+        """get_gibbs_energy should return a float, not crash."""
+        from unittest.mock import MagicMock
+        from nh3sofc.workflows.frequency import FrequencyWorkflow
+        from ase import Atoms
+
+        atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
+        atoms.cell = [10, 10, 10]
+        atoms.pbc = True
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wf = FrequencyWorkflow(atoms, work_dir=tmpdir)
+
+            mock_freq = MagicMock()
+            mock_freq.get_electronic_energy.return_value = -10.0
+            mock_freq.get_helmholtz_energy.return_value = 0.25
+            mock_freq.get_thermal_correction.return_value = {
+                "ZPE": 0.3, "E_vib": 0.35, "S_vib": 0.001,
+            }
+            wf.freq_calc = mock_freq
+
+            G = wf.get_gibbs_energy(temperature=300.0)
+            assert isinstance(G, float)
+            assert abs(G - (-9.75)) < 1e-10
+
+    def test_get_thermal_corrections_returns_dict(self):
+        """get_thermal_corrections should return a dict with expected keys."""
+        from unittest.mock import MagicMock
+        from nh3sofc.workflows.frequency import FrequencyWorkflow
+        from ase import Atoms
+
+        atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
+        atoms.cell = [10, 10, 10]
+        atoms.pbc = True
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wf = FrequencyWorkflow(atoms, work_dir=tmpdir)
+
+            mock_freq = MagicMock()
+            mock_freq.get_zpe.return_value = 0.3
+            mock_freq.get_helmholtz_energy.return_value = 0.25
+            mock_freq.get_vibrational_entropy.return_value = 0.001
+            mock_freq.get_thermal_correction.return_value = {
+                "ZPE": 0.3, "E_vib": 0.35,
+            }
+            wf.freq_calc = mock_freq
+
+            result = wf.get_thermal_corrections(temperature=300.0)
+            assert "zpe" in result
+            assert "helmholtz" in result
+            assert isinstance(result["zpe"], float)
+
+
+class TestExsolutionCoupleWithDecomposition:
+    """
+    Bug: couple_with_decomposition() passed atoms= but constructor
+    expects nh3_on_slab=. Would crash with TypeError.
+
+    Fix: Changed to nh3_on_slab=exsolved_atoms.
+    Date fixed: 2026-06-30
+    """
+
+    def test_couple_source_code_uses_nh3_on_slab(self):
+        """Source should use nh3_on_slab=, not atoms=."""
+        import inspect
+        from nh3sofc.workflows.exsolution import ExsolutionWorkflow
+
+        source = inspect.getsource(ExsolutionWorkflow.couple_with_decomposition)
+        assert "nh3_on_slab=" in source
+        assert "atoms=exsolved_atoms" not in source
+
+
+class TestNEBDeadCodeRemoved:
+    """
+    Bug: _setup_vasp() computed procs_per_image with wrong divisor
+    (n_images + 2) and never used the result.
+
+    Fix: Removed the dead code.
+    Date fixed: 2026-06-30
+    """
+
+    def test_setup_vasp_no_procs_per_image(self):
+        """_setup_vasp should not contain dead procs_per_image variable."""
+        import inspect
+        from nh3sofc.workflows.neb import NEBWorkflow
+
+        source = inspect.getsource(NEBWorkflow._setup_vasp)
+        assert "procs_per_image" not in source
+
+
+# ============================================================
+# Database + Core Audit (feat-010) regression tests
+# ============================================================
+
+
+class TestGetSurfaceAtomsZThreshold:
+    """
+    Bug: get_surface_atoms() ignored z_threshold entirely, hardcoding
+    layer_tolerance=2.0 when None was passed.
+
+    Fix: When layer_tolerance is None, use z_threshold * z_range.
+    Date fixed: 2026-06-30
+    """
+
+    def test_z_threshold_is_respected(self, simple_slab):
+        """Different z_threshold values should produce different surface sets."""
+        from nh3sofc.core.base import get_surface_atoms
+
+        idx_small, _ = get_surface_atoms(simple_slab, z_threshold=0.05)
+        idx_large, _ = get_surface_atoms(simple_slab, z_threshold=0.5)
+
+        assert len(idx_large) > len(idx_small)
+
+    def test_layer_tolerance_overrides_z_threshold(self, simple_slab):
+        """When layer_tolerance is set, z_threshold should be ignored."""
+        from nh3sofc.core.base import get_surface_atoms
+
+        idx_a, _ = get_surface_atoms(simple_slab, z_threshold=0.1, layer_tolerance=1.0)
+        idx_b, _ = get_surface_atoms(simple_slab, z_threshold=0.9, layer_tolerance=1.0)
+
+        assert sorted(idx_a) == sorted(idx_b)
+
+    def test_default_uses_z_threshold(self, simple_slab):
+        """Default behavior should use z_threshold=0.2."""
+        from nh3sofc.core.base import get_surface_atoms
+
+        idx_default, cut_default = get_surface_atoms(simple_slab)
+        idx_explicit, cut_explicit = get_surface_atoms(simple_slab, z_threshold=0.2)
+
+        assert sorted(idx_default) == sorted(idx_explicit)
+
+
+class TestAsedbMillerConsistency:
+    """
+    Bug: add_structure stored Miller without abs(), and
+    get_decomposition_energies queried without "m" prefix.
+
+    Fix: abs() on storage, auto "m" prefix on query.
+    Date fixed: 2026-06-30
+    """
+
+    def test_miller_stored_with_abs(self):
+        """Miller indices stored in DB should use abs() values."""
+        from nh3sofc.database import NH3SOFCDatabase
+        from ase import Atoms
+
+        atoms = Atoms("H", positions=[[0, 0, 0]], cell=[5, 5, 5], pbc=True)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = NH3SOFCDatabase(f"{tmpdir}/test.db")
+            db.add_structure(atoms, material="Test", calc_type="relax", miller=(1, -1, 0))
+
+            rows = db.query(miller="m110")
+            assert len(rows) == 1
+
+    def test_decomposition_energies_uses_m_prefix(self):
+        """get_decomposition_energies should add 'm' prefix automatically."""
+        from nh3sofc.database import NH3SOFCDatabase
+        from ase import Atoms
+        from ase.calculators.singlepoint import SinglePointCalculator
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = NH3SOFCDatabase(f"{tmpdir}/test.db")
+
+            atoms = Atoms("H", positions=[[0, 0, 0]], cell=[5, 5, 5], pbc=True)
+            calc = SinglePointCalculator(atoms, energy=-10.0)
+            atoms.calc = calc
+
+            db.add_structure(
+                atoms, material="LaVO3", calc_type="relax",
+                miller=(0, 0, 1), adsorbate="NH3", converged=True, energy=-10.0,
+            )
+
+            energies = db.get_decomposition_energies("LaVO3", miller="001")
+            assert "NH3" in energies
+            assert energies["NH3"] == -10.0

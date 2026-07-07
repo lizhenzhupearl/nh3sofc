@@ -114,7 +114,7 @@ class NH3SOFCDatabase:
 
         # Prepare key-value pairs
         # Add "m" prefix to miller to avoid ASE DB interpreting as int
-        miller_str = "m" + "".join(str(i) for i in miller)
+        miller_str = "m" + "".join(str(abs(i)) for i in miller)
         key_value_pairs = {
             "material": material,
             "miller": miller_str,
@@ -406,10 +406,7 @@ class NH3SOFCDatabase:
             selections.append(f"miller={miller}")
 
         for key, value in kwargs.items():
-            if isinstance(value, str):
-                selections.append(f"{key}={value}")
-            else:
-                selections.append(f"{key}={value}")
+            selections.append(f"{key}={value}")
 
         selection = ",".join(selections) if selections else ""
 
@@ -489,13 +486,17 @@ class NH3SOFCDatabase:
         material : str
             Material name
         miller : str
-            Miller indices
+            Miller indices (e.g. "001"). The "m" prefix used internally
+            for ASE DB storage is added automatically.
 
         Returns
         -------
         dict
             Step energies
         """
+        # Ensure miller has "m" prefix for DB lookup
+        miller_key = miller if miller.startswith("m") else f"m{miller}"
+
         steps = ["NH3", "NH2_H", "NH_2H", "N_3H"]
         energies = {}
 
@@ -504,7 +505,7 @@ class NH3SOFCDatabase:
                 material=material,
                 calc_type="relax",
                 adsorbate=step,
-                miller=miller,
+                miller=miller_key,
             )
             if row:
                 energies[step] = row.energy

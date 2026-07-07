@@ -222,12 +222,12 @@ def get_surface_atoms(
         Slab structure
     z_threshold : float
         Fraction of slab height to consider as surface (0.2 = top 20%).
-        Only used if layer_tolerance is None.
+        Only used if layer_tolerance is None (the default).
     layer_tolerance : float, optional
         If provided, select atoms within this distance (Angstrom) of the
         topmost atom. This is more physically meaningful than z_threshold
-        as it selects exactly the top atomic layer(s). Default is 2.0 Å,
-        which captures the topmost bilayer in perovskites (e.g., VO2 + LaO).
+        as it selects exactly the top atomic layer(s). When None (default),
+        falls back to the fractional z_threshold method.
 
     Returns
     -------
@@ -236,22 +236,24 @@ def get_surface_atoms(
 
     Examples
     --------
-    >>> # Get only the topmost layer (within 1 Å of highest atom)
+    >>> # Use fractional threshold (default: top 20%)
     >>> surface_idx, z_cut = get_surface_atoms(slab)
     >>>
-    >>> # Use fractional threshold (legacy behavior)
-    >>> surface_idx, z_cut = get_surface_atoms(slab, z_threshold=0.2, layer_tolerance=None)
+    >>> # Use absolute layer tolerance (atoms within 2 Å of topmost atom)
+    >>> surface_idx, z_cut = get_surface_atoms(slab, layer_tolerance=2.0)
     """
     z_positions = atoms.positions[:, 2]
     z_max = z_positions.max()
 
-    # Default to layer-based detection (2.0 Å tolerance)
-    # This captures the topmost "bilayer" in perovskites (e.g., VO2 + LaO)
-    if layer_tolerance is None:
-        layer_tolerance = 2.0
+    if layer_tolerance is not None:
+        # Use layer tolerance: atoms within layer_tolerance of the topmost atom
+        z_cutoff = z_max - layer_tolerance
+    else:
+        # Fall back to fractional z_threshold (legacy behavior)
+        z_min = z_positions.min()
+        z_range = z_max - z_min
+        z_cutoff = z_max - z_threshold * z_range
 
-    # Use layer tolerance: atoms within layer_tolerance of the topmost atom
-    z_cutoff = z_max - layer_tolerance
     surface_indices = [i for i, z in enumerate(z_positions) if z > z_cutoff]
 
     return surface_indices, z_cutoff

@@ -8,7 +8,7 @@ from typing import Optional, List, Union, Dict, Any
 import numpy as np
 from ase import Atoms
 from ase.io import write as ase_write, read as ase_read
-from ase.optimize import BFGS, FIRE, LBFGS
+from ase.optimize import BFGS
 
 from ..core.base import BaseWorkflow
 from ..calculators.vasp.inputs import VASPInputGenerator
