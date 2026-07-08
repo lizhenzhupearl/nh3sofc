@@ -6,8 +6,8 @@ calculations based on DFT-derived energetics.
 
 from typing import Optional, List, Dict, Any, Tuple
 import numpy as np
-from scipy.integrate import odeint
-from scipy.optimize import fsolve
+from scipy.integrate import odeint, solve_ivp
+from scipy.optimize import fsolve, least_squares
 
 from ..core.constants import KB_EV, H_EV_S
 
@@ -333,7 +333,7 @@ class MicroKineticModel:
 
     def solve_steady_state(
         self,
-        method: str = "fsolve",
+        method: str = "robust",
         **kwargs,
     ) -> Dict[str, float]:
         """
@@ -342,7 +342,12 @@ class MicroKineticModel:
         Parameters
         ----------
         method : str
-            Solution method ("fsolve" or "ode")
+            Solution method:
+            - "robust" (default): ODE warm-up then bounded least-squares polish.
+              Handles stiff systems with rate constants spanning many orders of
+              magnitude. Enforces 0 <= theta <= total_sites.
+            - "fsolve": Direct fsolve (may diverge for stiff systems).
+            - "ode": Pure ODE integration to long time.
         **kwargs : dict
             Additional solver parameters
 
@@ -373,7 +378,9 @@ class MicroKineticModel:
         y0 = np.maximum(y0, 1e-10)
         y0 = y0 / y0.sum() * self.total_sites
 
-        if method == "fsolve":
+        if method == "robust":
+            y_ss = self._solve_robust(y0, species_list, site_species, **kwargs)
+        elif method == "fsolve":
             solution = fsolve(
                 self._steady_state_equations,
                 y0,
@@ -392,6 +399,79 @@ class MicroKineticModel:
         y_ss = np.maximum(y_ss, 0.0)
 
         return dict(zip(species_list, y_ss))
+
+    def _solve_robust(
+        self,
+        y0: np.ndarray,
+        species_list: List[str],
+        site_species: str,
+        **kwargs: Any,
+    ) -> np.ndarray:
+        """Try fsolve first; fall back to ODE warm-up + bounded least-squares.
+
+        For simple systems fsolve converges instantly. For stiff systems (rate
+        constants spanning many orders of magnitude) fsolve may diverge, so we
+        fall back to a two-stage approach:
+
+        Stage 1: Integrate ODEs with BDF (stiff solver) to get near steady state.
+        Stage 2: Polish with bounded least_squares (enforces 0 <= theta).
+        """
+        n = len(species_list)
+
+        # Fast path: try fsolve
+        sol_fsolve = fsolve(
+            self._steady_state_equations,
+            y0,
+            args=(species_list, site_species),
+            full_output=True,
+        )
+        y_fs = sol_fsolve[0]
+        info = sol_fsolve[1]
+        ier = sol_fsolve[2]
+
+        # Accept if converged, non-negative, and site balance holds
+        if (
+            ier == 1
+            and np.all(y_fs >= -1e-10)
+            and abs(y_fs.sum() - self.total_sites) < 1e-6
+        ):
+            return np.maximum(y_fs, 0.0)
+
+        # Slow path: ODE warm-up → bounded polish
+        def ode_rhs(t: float, y: np.ndarray) -> np.ndarray:
+            return self._coverage_odes(y, 0.0, species_list)
+
+        # Adaptive integration time: 100 / slowest rate constant gives
+        # a reasonable timescale. Default to 1.0 s if no reactions.
+        k_min = min(
+            (rxn["k_fwd"] for rxn in self.reactions.values() if rxn["k_fwd"] > 0),
+            default=1.0,
+        )
+        ode_time = min(100.0 / k_min, 1e6)  # cap at 1e6 s
+
+        sol = solve_ivp(
+            ode_rhs,
+            [0, ode_time],
+            y0,
+            method="BDF",
+            rtol=1e-8,
+            atol=1e-10,
+        )
+        y_warm = np.maximum(sol.y[:, -1], 0.0)
+
+        # Polish with bounded least-squares
+        result = least_squares(
+            self._steady_state_equations,
+            y_warm,
+            args=(species_list, site_species),
+            bounds=(np.zeros(n), np.full(n, self.total_sites)),
+            method="trf",
+            xtol=1e-12,
+            ftol=1e-12,
+            gtol=1e-12,
+        )
+
+        return result.x
 
     def get_tof(
         self,

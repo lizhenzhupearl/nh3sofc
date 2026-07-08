@@ -219,18 +219,8 @@ class TestTwoStepMultipleConditions:
 
 
 class TestNH3ModelSanityChecks:
-    """Sanity checks for the full NH3 decomposition model (not analytic, just physical).
+    """Sanity checks for the full NH3 decomposition model."""
 
-    Note: The default NH3DecompositionModel has convergence issues with fsolve
-    due to stiff kinetics (large barrier spread) and poor initial guess conditioning.
-    Tests marked xfail will pass once the solver is improved (tracked as T1.3 gap).
-    """
-
-    @pytest.mark.xfail(
-        reason="NH3DecompositionModel default fsolve diverges: site balance violated "
-        "(θ sum=125). Solver conditioning needs improvement — tracked as T1.3 gap.",
-        strict=True,
-    )
     def test_default_model_converges(self) -> None:
         """Default NH3DecompositionModel reaches steady state."""
         from nh3sofc.analysis.microkinetic import NH3DecompositionModel
@@ -246,10 +236,6 @@ class TestNH3ModelSanityChecks:
         for species, cov in coverages.items():
             assert cov >= -1e-10, f"{species} = {cov}"
 
-    @pytest.mark.xfail(
-        reason="Depends on solver convergence fix (T1.3 gap).",
-        strict=True,
-    )
     def test_tof_positive(self) -> None:
         """TOF is positive (net forward decomposition)."""
         from nh3sofc.analysis.microkinetic import NH3DecompositionModel
@@ -259,12 +245,7 @@ class TestNH3ModelSanityChecks:
         assert tof > 0, f"TOF = {tof} (should be positive for decomposition)"
 
     def test_higher_temperature_higher_tof(self) -> None:
-        """Higher temperature gives higher TOF (Arrhenius behavior).
-
-        Note: This test passes because both TOFs are negative (solver diverged)
-        and the magnitudes happen to order correctly. It will be meaningful
-        once convergence is fixed.
-        """
+        """Higher temperature gives higher TOF (Arrhenius behavior)."""
         from nh3sofc.analysis.microkinetic import NH3DecompositionModel
 
         tof_low = NH3DecompositionModel(temperature=500.0).get_tof()

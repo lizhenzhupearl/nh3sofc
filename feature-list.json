@@ -126,7 +126,7 @@
       "description": "Primary oracle: MKM-predicted apparent Ea and reaction orders (NH3, H2) for NH3 decomposition on Ni vs literature. Limiting-case test: analytic two-step network solved by analysis/microkinetic.py (tol 1e-8). Implement as pytest regression.",
       "dependencies": [],
       "status": "passing",
-      "evidence": "ORACLE.md filled with Ni benchmark (Ea_app 163-197 kJ/mol, reaction orders, literature refs). tests/test_mkm_oracle.py: 16 pass + 2 xfail. Analytic two-step test passes at 1e-8 tolerance across 5 temps and 5 pressures. NH3DecompositionModel fsolve divergence found and recorded as T1.3 gap.",
+      "evidence": "ORACLE.md filled. tests/test_mkm_oracle.py: 18 pass (analytic two-step + NH3 model sanity checks). Solver divergence fixed with robust two-stage solver (fsolve fast-path + BDF/least_squares fallback).",
       "spec": "nh3sofc_code_review_and_plan_v3.md",
       "track": "S"
     },
