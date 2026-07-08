@@ -429,9 +429,13 @@ class MicroKineticModel:
         info = sol_fsolve[1]
         ier = sol_fsolve[2]
 
-        # Accept if converged, non-negative, and site balance holds
+        # Accept only if: converged, non-negative, site balance holds,
+        # AND residual is actually small (fsolve can report ier=1 for
+        # trivial solutions that aren't true steady states).
+        residual_norm = np.linalg.norm(info["fvec"])
         if (
             ier == 1
+            and residual_norm < 1e-6
             and np.all(y_fs >= -1e-10)
             and abs(y_fs.sum() - self.total_sites) < 1e-6
         ):

@@ -111,8 +111,26 @@
 
 **Known Risks:** None
 
+### Session 6 continued — 2026-07-08
+
+**Goal:** Phase 1 — Oracle activation and Ni benchmark campaign
+
+**Completed:**
+- **T1.1:** Filled ORACLE.md with Ni benchmark (Ea_app targets, literature refs, sanity checks). Created tests/test_mkm_oracle.py with analytic two-step limiting-case regression (16 tests at 1e-8 tolerance).
+- **T1.3-gap1:** Fixed MKM solver divergence — NH3DecompositionModel fsolve diverged for stiff systems. Added robust two-stage solver (fsolve fast-path → BDF warm-up + bounded least_squares fallback).
+- **T1.2:** Ran first Ni benchmark experiments:
+  - EXP-001 (lit DFT barriers): Ea_app=337.5 kJ/mol (target: 133-227) — DISCARD
+  - EXP-002 (MACE barriers): negative TOF — DISCARD
+  - Root cause: 0K DFT energies without thermodynamic corrections
+- **T1.3:** Recorded 4 scientific gaps (G1-G4) in EXPERIMENTS.md and feature-list.json
+
+**Key finding:** Thermochemistry corrections (ZPE + vibrational entropy + gas-phase entropy) are mandatory for MKM. The H₂ desorption free energy (dG_H2 = +1.06 eV at 0K, ~+0.36 eV at 673K with TΔS) completely controls surface H* coverage and TOF.
+
+**Verification:** 132 tests passing (18 oracle + 4 ratchet + 110 existing)
+
 ## Notes for Next Session
 
-- Phase 0 complete — harness now owns the v3 plan
-- Ratchets are active: new print() calls or broad excepts will fail tests
-- Next: Phase 1 (T1.1 oracle + T1.2 Ni benchmark) — science track starts
+- Phase 0 complete, Phase 1 complete (Track S started)
+- **Science blocker:** G1 (thermochemistry integration into MKM) blocks meaningful Ni benchmark results
+- Track E next priorities: Phase 2 (T2.1-T2.4: CI teeth, deprecation fix, CLI fix)
+- Track S next priority: G1 (integrate thermochemistry corrections into MKM workflow)

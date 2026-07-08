@@ -135,7 +135,8 @@
       "name": "Begin Ni benchmark campaign",
       "description": "Assemble literature energetics for NH3 decomposition on Ni, run MKM, log to EXPERIMENTS.md with KEEP/DISCARD. This is the master plan's Phase 4.5 validation.",
       "dependencies": ["T1.1"],
-      "status": "not-started",
+      "status": "passing",
+      "evidence": "EXP-001 (lit barriers) and EXP-002 (MACE barriers) both DISCARD. Root cause: 0K DFT energies without thermodynamic corrections. MKM framework validated (solver converges, site balance OK). 4 scientific gaps identified and logged.",
       "spec": "nh3sofc_code_review_and_plan_v3.md",
       "track": "S"
     },
@@ -144,9 +145,42 @@
       "name": "Record scientific gaps from Ni benchmark",
       "description": "Record scientific gaps found during T1.2 (missing thermochemistry corrections, solver issues) as new features. Science drives the engineering backlog.",
       "dependencies": ["T1.2"],
-      "status": "not-started",
+      "status": "passing",
+      "evidence": "4 gaps recorded: (1) thermochemistry corrections missing (G1), (2) MACE barriers unreliable (G2), (3) H2 desorption thermo dominates kinetics (G3), (4) sensitivity_analysis API bug (G4). All logged in EXPERIMENTS.md and feature-list.json.",
       "spec": "nh3sofc_code_review_and_plan_v3.md",
       "track": "S"
+    },
+    {
+      "id": "G1",
+      "name": "Integrate thermochemistry corrections into MKM workflow",
+      "description": "MKM needs Gibbs free energies at operating temperature, not 0K DFT energies. The existing analysis/thermochemistry.py has ZPE/thermal tools but they are not wired into MKM. Key gap: TΔS(H2,gas) ≈ 0.7 eV at 673K completely changes H* coverage. BLOCKS: meaningful Ni benchmark results.",
+      "dependencies": [],
+      "status": "not-started",
+      "track": "S"
+    },
+    {
+      "id": "G2",
+      "name": "DFT NEB validation for Ni(111) barriers",
+      "description": "MACE NEB barriers are unreliable (MAE 0.64 eV, wrong RDS). Need DFT NEB for production barriers. Use literature values until own DFT NEBs are available.",
+      "dependencies": [],
+      "status": "not-started",
+      "track": "S"
+    },
+    {
+      "id": "G3",
+      "name": "Validate H binding and H2 desorption free energy on Ni",
+      "description": "H2 desorption thermodynamics dominate MKM kinetics. Model is extremely sensitive to H binding energy and H2 desorption free energy. Must validate carefully with DFT + thermal corrections.",
+      "dependencies": ["G1"],
+      "status": "not-started",
+      "track": "S"
+    },
+    {
+      "id": "G4",
+      "name": "Fix sensitivity_analysis() API bug",
+      "description": "sensitivity_analysis() has a required 'parameter' argument that is unused in the function body. Should be removed or made optional.",
+      "dependencies": [],
+      "status": "not-started",
+      "track": "E"
     },
     {
       "id": "T2.1",
