@@ -33,6 +33,7 @@ When the session involves computation, experiments, or scientific analysis, also
 - **Update artifacts**: Before ending session, update `progress.md` and `feature-list.json`
 - **Stay in scope**: Don't modify files unrelated to the current feature
 - **Leave clean state**: Next session must be able to run `./init.sh` immediately
+- **Deprecation shims for breaking changes**: Renaming or removing any public API, function, or returned dict key requires a deprecation shim for one minor version (follow the existing `get_dopant_name` → `get_material_name` pattern). Ship the shim in the same commit as the rename; remove it one minor version later.
 
 ## Code Discipline (condensed from [karpathy-rules.md](karpathy-rules.md))
 
@@ -47,6 +48,7 @@ When the session involves computation, experiments, or scientific analysis, also
 
 - [ ] Target behavior is implemented
 - [ ] Verification actually ran (`pytest tests/` + import smoke check)
+- [ ] Metrics ratchet tests pass via `./init.sh` (no regression in print count, broad excepts, or annotation fraction)
 - [ ] Evidence recorded in `feature-list.json` and `progress.md`
 - [ ] Repository remains restartable via `./init.sh`
 - [ ] For non-trivial computation code: `BUG_CHECKLIST.md` 3-round review completed

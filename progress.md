@@ -2,11 +2,11 @@
 
 ## Current Verified State
 
-**Last Updated:** 2026-06-29
+**Last Updated:** 2026-07-08
 **Repo Root:** `/Users/zhenzhu/NH3SOFC`
 **Startup Path:** `./init.sh`
-**Verification Path:** `pytest tests/ -v && python -c "from nh3sofc.structure import SurfaceBuilder, AdsorbatePlacer"`
-**All baseline features:** passing (feat-001 through feat-005)
+**Verification Path:** `pytest tests/ -v` (114 tests passing)
+**All baseline features:** passing (feat-001 through feat-010, T0.1–T0.4)
 **Current Blockers:** None
 
 ## Session Log
@@ -17,81 +17,102 @@
 
 **Completed:**
 - Merged harness patterns (startup workflow, working rules, definition of done, session lifecycle) into CLAUDE.md
-- Customized init.sh for Python/NH3SOFC (pip install -e . → pytest → import smoke check)
-- Populated feature-list.json with 5 real features reflecting current project state
-- Initialized progress.md (this file)
-- Removed agents.md template (content merged into CLAUDE.md)
+- Customized init.sh for Python/NH3SOFC
+- Populated feature-list.json with 5 real features
+- Wired research discipline files into CLAUDE.md
+- Integrated Karpathy's 10 rules as condensed Code Discipline section
+- Moved plan.md to docs/plans/
 
-**Verification:** Pending (run `./init.sh` to confirm)
+**Verification:** init.sh passes, 71 tests passing
 
-**Known Risks:** None
-
-**Next Best Step:** Run `./init.sh` to confirm baseline passes, then add new features to feature-list.json as research priorities emerge
+**Commits:** 750f808
 
 ### Session 2 — 2026-06-29
 
-**Goal:** Review uncommitted changes in dopants.py, write tests for them
+**Goal:** Review uncommitted dopants.py changes, write tests, add backward compat
 
 **Completed:**
-- Reviewed 16-line diff in `nh3sofc/structure/dopants.py`: generalizes `analyze_dopant_distribution()` and `print_dopant_analysis()` to support non-Ce hosts (YSZ, ScSZ, etc.)
-- Key changes: added `host_cation` param, renamed `ce_total` -> `host_total` in return dict, added backward-compat fallback in `print_dopant_analysis()`
-- Added 7 regression tests in `TestAnalyzeDopantDistributionHostCation` covering: key rename, default host, YSZ analysis, dopant fraction calculation, wrong host detection, print backward compat
-- Added 1 new smoke test `test_analyze_dopant_distribution_ysz` for YSZ host analysis
-- Updated existing smoke test `test_analyze_dopant_distribution` to assert on new `host_total`/`host_cation` keys
-- All 79 tests pass (was 71 before)
+- Reviewed 16-line diff generalizing analyze_dopant_distribution() for non-Ce hosts
+- Added 7 regression tests + 1 smoke test for host_cation support
+- Added ce_total backward-compat alias for Ce hosts
 
-**Verification:** `pytest tests/ -v` — 79 passed, 0 failed
+**Verification:** 79 tests passing
 
-**Known Risks:** The `ce_total` -> `host_total` key rename is a breaking change for any downstream code that accesses `stats["ce_total"]` directly
+### Session 3 — 2026-06-29/30
 
-**Next Best Step:** Commit the dopants.py changes together with the new tests
-
-### Session 3 — 2026-06-29
-
-**Goal:** Add backward compatibility for `ce_total` -> `host_total` rename in `analyze_dopant_distribution()`
+**Goal:** Harnessed codebase audit (feat-006 through feat-008)
 
 **Completed:**
-- Searched entire codebase for `ce_total` references: found in `dopants.py` (3 locations), `test_regressions.py` (6 locations), `test_smoke.py` (2 locations). No references in tutorials or docs.
-- Added backward-compatibility alias: `analyze_dopant_distribution()` now includes `ce_total` in the return dict when `host_cation == "Ce"`, so existing code using `stats["ce_total"]` continues to work
-- Added `import warnings` to module imports
-- Updated docstring to document `ce_total` as a deprecated alias
-- Updated regression test `test_host_total_replaces_ce_total` to expect `ce_total` present as deprecated alias (instead of asserting it's absent)
-- Added assertion in `test_host_cation_zr_for_ysz` to verify `ce_total` is NOT present for non-Ce hosts
-- All 79 tests pass
+- **Structure audit (feat-006):** Fixed 2 bugs (cluster atom count, molecule fallback), 4 regression tests
+- **Calculators audit (feat-007):** Fixed 5 bugs (INCAR case, Hubbard U f-orbitals, VDW case, cm-1 conversion, is_converged false positive), 12 regression tests
+- **Analysis audit (feat-008):** Fixed 2 bugs (DOSCAR LORBIT=11, set_bulk_energy), verified all conversion factors correct, 6 regression tests
+- Merged all fixes to main
 
-**Verification:** `pytest tests/ -v` — 79 passed, 0 failed
+**Verification:** 101 tests passing
 
-**Known Risks:** None — the breaking change is now resolved. Both `ce_total` and `host_total` work for Ce hosts.
+**Commits:** 61880cf
 
-**Next Best Step:** Commit all uncommitted changes (dopants.py generalization + backward compat + tests)
+**Known Risks:** None
+
+**Next Best Step:** Complete remaining audits (feat-009: workflows, feat-010: database+core)
 
 ### Session 4 — 2026-06-29
 
-**Goal:** feat-007 — Audit `nh3sofc/calculators/` subpackage (8 files)
+**Goal:** Audit nh3sofc/database/ + nh3sofc/core/ (feat-010)
 
 **Completed:**
-- Audited all 9 files in calculators/ (vasp/inputs.py, vasp/outputs.py, vasp/frequency.py, mace/interface.py, mace/training.py, plus __init__.py files)
-- Found and fixed 5 bugs:
-  1. **INCAR parameter case mismatch** (critical): DEFAULT_VASP_PARAMS used lowercase keys but CALC_PRESETS and generate_incar used uppercase, causing duplicate INCAR parameters. Fixed by uppercasing all keys in DEFAULT_VASP_PARAMS.
-  2. **Hubbard U f-orbital bug** (critical): set_hubbard_u() hardcoded LDAUL=2 (d-orbitals) for ALL elements including lanthanides. Fixed with F_ELECTRON_ELEMENTS set and automatic LDAUL=3 / LMAXMIX=6 selection.
-  3. **VDW_METHODS lowercase keys** (critical): Used `"ivdw"` instead of `"IVDW"`, causing VDW settings to end up in wrong INCAR section.
-  4. **cm-1 to eV conversion** (moderate): Hardcoded 1.23981e-4 (wrong); now derived from H_EV_S * C_CMS = 1.23984e-4.
-  5. **is_converged false positive** (moderate): Returned True for unconverged relaxations via "EDIFF is reached" check. Fixed to check "General timing and accounting" for static calcs only.
-- Fixed 4 lint issues: unused imports (ase_write, HUBBARD_U, VASPOutputParser, H_EV_S), mutable default argument, uninitialized _kpoints_mesh
-- Fixed 1 API inconsistency: added MACE exports to calculators/__init__.py
-- Added 12 regression tests (4 for case mismatch, 3 for Hubbard U, 2 for conversion factor, 3 for is_converged)
-- All 83 tests pass
+- Audited 8 files: core/__init__.py, core/constants.py, core/base.py, core/io.py, database/__init__.py, database/naming.py, database/asedb.py, cli/__init__.py
+- **BUG 1 (critical):** `get_surface_atoms()` ignored `z_threshold` parameter entirely; when `layer_tolerance=None`, it hardcoded 2.0 instead of using `z_threshold`. Fixed to fall back to fractional threshold.
+- **BUG 2 (moderate):** `asedb.py` `add_structure()` stored Miller indices without `abs()`, inconsistent with `naming.py` which uses `abs()`. Fixed.
+- **BUG 3 (moderate):** `get_decomposition_energies()` passed `miller="001"` but DB stores `"m001"`, so queries silently returned empty. Fixed to add "m" prefix.
+- **LINT 1:** Redundant `isinstance` branch in `query()` kwargs loop (both branches did same thing). Fixed.
+- **Noted but not fixed (out of scope):** `SURFACE_POLARITY` imported but unused in `surface.py`; `STRUCTURE_TYPES`, `TOLERANCE`, `KB_J`, `H_J_S` defined but never used in constants.py (intentional placeholders)
+- Verified all physical constants correct (KB_EV, H_EV_S, EV_TO_KJ_MOL, etc.)
+- 6 regression tests added, 77 tests passing
 
-**Verification:** `pytest tests/ -v` — 83 passed, 0 failed
+**Verification:** 77 tests passing
 
-**Known Risks:** The DEFAULT_VASP_PARAMS key case change could affect downstream code that accesses params by lowercase keys, but no such usage found in codebase.
+**Known Risks:** None
 
-**Next Best Step:** Continue with feat-006 (structure audit) or feat-008 (analysis audit)
+**Next Best Step:** Complete feat-009 (workflows audit)
+
+### Session 5 — 2026-06-30
+
+**Goal:** Complete final audit (feat-009: workflows) and merge all remaining fixes
+
+**Completed:**
+- **Workflows audit (feat-009):** Fixed 3 bugs (get_gibbs_energy TypeError, couple_with_decomposition wrong kwarg, NEB dead code), 2 lint fixes, 5 regression tests
+- Merged feat-009 and feat-010 fixes to main
+- Cleaned up all worktree branches
+- Updated all harness artifacts
+
+**Verification:** 110 tests passing
+
+**Commits:** 71db775
+
+**Known Risks:** None
+
+### Session 6 — 2026-07-08
+
+**Goal:** Execute Phase 0 of nh3sofc_code_review_and_plan_v3.md (make harness own the plan)
+
+**Completed:**
+- **T0.1:** Imported all 20 tasks (T0.1–T4.3) into feature-list.json with track labels (S/E), dependencies, spec references
+- **T0.2:** Added breaking-change deprecation shim policy to CLAUDE.md Working Rules (closes H3)
+- **T0.3:** Added metrics ratchet line to CLAUDE.md Definition of Done (closes H4 partially)
+- **T0.4:** Created `scripts/metrics.py` (AST+tokenize-based, not regex), `tests/test_metrics_ratchet.py` (4 tests), `metrics_baseline.json`
+- Copied v3 plan to `docs/plans/nh3sofc_code_review_and_plan_v3.md`
+- Added `docs/claude/` reference files (key-directories, plan-management, testing-guide)
+
+**Authoritative baseline (AST-based, corrects v2's regex estimates):**
+- total_functions: 530, annotated: 448 (84.5%), print_calls: 226, broad_excepts: 21
+
+**Verification:** 114 tests passing (110 existing + 4 ratchet)
+
+**Known Risks:** None
 
 ## Notes for Next Session
 
-- All 5 features in feature-list.json are currently "passing" — the project is at a stable baseline
-- New features should be appended to feature-list.json as feat-006, feat-007, etc.
-- When starting a new research task, add it as a feature first, then work on it
-- The uncommitted dopants.py changes + new tests are ready to commit
-- Consider adding a `DeprecationWarning` when `ce_total` is accessed in a future version
+- Phase 0 complete — harness now owns the v3 plan
+- Ratchets are active: new print() calls or broad excepts will fail tests
+- Next: Phase 1 (T1.1 oracle + T1.2 Ni benchmark) — science track starts

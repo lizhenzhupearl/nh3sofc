@@ -6,7 +6,7 @@
       "description": "Project installs cleanly, all tests pass, import smoke checks succeed, init.sh runs without errors",
       "dependencies": [],
       "status": "passing",
-      "evidence": "pytest tests/ -v passes; import smoke checks pass; init.sh runs clean"
+      "evidence": "pytest tests/ -v passes (110 tests); import smoke checks pass; init.sh runs clean"
     },
     {
       "id": "feat-002",
@@ -43,42 +43,217 @@
     {
       "id": "feat-006",
       "name": "Audit: nh3sofc/structure/ (8 files)",
-      "description": "Audit structure subpackage for bugs, type inconsistencies, and lint issues. Scope: bulk.py, surface.py, adsorbates.py, defects.py, dopants.py, decomposition.py, exsolution.py, __init__.py. Oracle: mypy clean, no logic bugs, no unit/sign errors, tests pass.",
+      "description": "Audit structure subpackage for bugs, type inconsistencies, and lint issues.",
       "dependencies": ["feat-001"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Fixed 2 bugs (cluster atom count, molecule fallback). Added 4 regression tests. Merged in commit 61880cf."
     },
     {
       "id": "feat-007",
       "name": "Audit: nh3sofc/calculators/ (8 files)",
-      "description": "Audit calculators subpackage (vasp + mace) for bugs, type inconsistencies, and lint issues. Oracle: mypy clean, VASP input generation logic correct, tests pass.",
+      "description": "Audit calculators subpackage for bugs, type inconsistencies, and lint issues.",
       "dependencies": ["feat-001"],
       "status": "passing",
-      "evidence": "Fixed 5 bugs (INCAR case mismatch, Hubbard U f-orbital, VDW key case, cm-1 conversion, is_converged false positive), 4 lint issues, 1 API inconsistency. 12 regression tests added. 83 tests pass. Commit d6dd99c."
+      "evidence": "Fixed 5 bugs (INCAR case mismatch, Hubbard U f-orbital, VDW key case, cm-1 conversion, is_converged false positive), 12 regression tests. Merged in commit 61880cf."
     },
     {
       "id": "feat-008",
       "name": "Audit: nh3sofc/analysis/ (8 files)",
-      "description": "Audit analysis subpackage for bugs, unit/sign errors, and type inconsistencies. Scope: energetics.py, thermochemistry.py, microkinetic.py, rds.py, surface_comparison.py, electronic.py, exsolution.py. Oracle: mypy clean, no unit/sign/normalization bugs, tests pass.",
+      "description": "Audit analysis subpackage for bugs, unit/sign errors, and type inconsistencies.",
       "dependencies": ["feat-001"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Fixed 2 bugs (DOSCAR LORBIT=11, set_bulk_energy). 6 regression tests. Merged in commit 61880cf."
     },
     {
       "id": "feat-009",
       "name": "Audit: nh3sofc/workflows/ (7 files)",
-      "description": "Audit workflows subpackage for bugs, type inconsistencies, and lint issues. Scope: relaxation.py, neb.py, frequency.py, decomposition.py, screening.py, exsolution.py. Oracle: mypy clean, no logic bugs, tests pass.",
+      "description": "Audit workflows subpackage for bugs, type inconsistencies, and lint issues.",
       "dependencies": ["feat-001"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Fixed 3 bugs (get_gibbs_energy TypeError, couple_with_decomposition wrong kwarg, NEB dead code), 5 regression tests. Merged in commit 71db775."
     },
     {
       "id": "feat-010",
       "name": "Audit: nh3sofc/database/ + core/ (7 files)",
-      "description": "Audit database and core subpackages for bugs, type inconsistencies, and lint issues. Oracle: mypy clean, no logic bugs, tests pass.",
+      "description": "Audit database and core subpackages for bugs, type inconsistencies, and lint issues.",
       "dependencies": ["feat-001"],
+      "status": "passing",
+      "evidence": "Fixed 3 bugs (get_surface_atoms z_threshold, asedb miller abs(), get_decomposition_energies miller format), 6 regression tests."
+    },
+    {
+      "id": "T0.1",
+      "name": "Import v3 plan tasks into feature-list.json",
+      "description": "Import all tasks from nh3sofc_code_review_and_plan_v3.md into feature-list.json. Closes harness gap H2.",
+      "dependencies": [],
+      "status": "passing",
+      "evidence": "All 20 tasks (T0.1-T4.3) imported. Plan spec at docs/plans/nh3sofc_code_review_and_plan_v3.md.",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T0.2",
+      "name": "Add breaking-change policy to CLAUDE.md",
+      "description": "Add to Working Rules: renaming/removing any public API or returned dict key requires a deprecation shim for one minor version. Closes H3.",
+      "dependencies": [],
+      "status": "passing",
+      "evidence": "Deprecation shim rule added to CLAUDE.md Working Rules section.",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T0.3",
+      "name": "Add metrics ratchet to Definition of Done",
+      "description": "Add 'metrics ratchet tests pass via ./init.sh' to CLAUDE.md Definition of Done. Activates after T0.4 lands.",
+      "dependencies": ["T0.4"],
+      "status": "passing",
+      "evidence": "Metrics ratchet line added to Definition of Done in CLAUDE.md.",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T0.4",
+      "name": "Create metrics script, ratchet test, and baseline",
+      "description": "Create scripts/metrics.py (AST-based, not regex): counts total functions, annotated functions, print() calls, broad/bare excepts. Emits metrics_baseline.json. Add tests/test_metrics_ratchet.py enforcing no-worse-than baseline.",
+      "dependencies": [],
+      "status": "passing",
+      "evidence": "scripts/metrics.py (AST+tokenize), tests/test_metrics_ratchet.py (4 tests), metrics_baseline.json generated. Baseline: funcs=530, annotated=448 (84.5%), prints=226, excepts=21. 114 tests passing.",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T1.1",
+      "name": "Fill ORACLE.md with Ni benchmark",
+      "description": "Primary oracle: MKM-predicted apparent Ea and reaction orders (NH3, H2) for NH3 decomposition on Ni vs literature. Limiting-case test: analytic two-step network solved by analysis/microkinetic.py (tol 1e-8). Implement as pytest regression.",
+      "dependencies": [],
       "status": "not-started",
-      "evidence": ""
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "S"
+    },
+    {
+      "id": "T1.2",
+      "name": "Begin Ni benchmark campaign",
+      "description": "Assemble literature energetics for NH3 decomposition on Ni, run MKM, log to EXPERIMENTS.md with KEEP/DISCARD. This is the master plan's Phase 4.5 validation.",
+      "dependencies": ["T1.1"],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "S"
+    },
+    {
+      "id": "T1.3",
+      "name": "Record scientific gaps from Ni benchmark",
+      "description": "Record scientific gaps found during T1.2 (missing thermochemistry corrections, solver issues) as new features. Science drives the engineering backlog.",
+      "dependencies": ["T1.2"],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "S"
+    },
+    {
+      "id": "T2.1",
+      "name": "CI: add ruff, mypy, coverage gates",
+      "description": "Extend .github/workflows/ci.yml with ruff check + format, mypy nh3sofc/, pytest --cov --cov-fail-under=<current>. Migrate black+isort config to ruff. Ratchet: coverage floor only goes up.",
+      "dependencies": [],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T2.2",
+      "name": "Mirror CI checks in init.sh",
+      "description": "Mirror ruff, mypy, coverage, and T0.4 ratchet test in init.sh so local verification == CI.",
+      "dependencies": ["T2.1", "T0.4"],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T2.3",
+      "name": "Fix deprecation warning in tests",
+      "description": "Fix deprecated call at tests/test_smoke.py:254; set filterwarnings = [\"error::DeprecationWarning\"] in pytest config.",
+      "dependencies": [],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T2.4",
+      "name": "Fix or remove broken CLI entry point",
+      "description": "Implement minimal nh3sofc/cli/main.py (--version, info) or delete [project.scripts]. Add entry-point test.",
+      "dependencies": [],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T3.1",
+      "name": "Migrate workflows/ and calculators/ to logging (dedicated)",
+      "description": "Migrate print() to logging in workflows/ and calculators/ — platform prerequisite for parseable execution logs. Add core/logging_config.py. Separate mechanical commits per package.",
+      "dependencies": [],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T3.2",
+      "name": "Migrate remaining print() to logging (opportunistic)",
+      "description": "All other packages: migrate prints when a module is touched for real work. Ratchet (T0.4) enforces monotonic progress and blocks new prints.",
+      "dependencies": ["T0.4"],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T3.3",
+      "name": "Narrow broad excepts (opportunistic)",
+      "description": "Narrow, re-raise as package exceptions (core/exceptions.py: Nh3sofcError → CalculationError, ConvergenceError, StructureError), or delete. Create core/exceptions.py up front. Ratchet enforces trend.",
+      "dependencies": ["T0.4"],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T3.4",
+      "name": "Typing ratchet (opportunistic)",
+      "description": "Annotate any function you touch; ratchet enforces fraction never decreases. mypy strictness raised per-module as modules reach full annotation.",
+      "dependencies": ["T0.4"],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T3.5",
+      "name": "Oversized-module splits (opportunistic)",
+      "description": "Split defects/dopants/surface/adsorbates only when substantially modified. Pure-move commits protected by tests.",
+      "dependencies": [],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T4.1",
+      "name": "DFTProtocol dataclass with content_hash()",
+      "description": "core/protocol.py: frozen DFTProtocol dataclass (functional, U map, ENCUT, k-spacing, dipole, magnetism init, D3 flag) with stable content_hash(). VASPInputGenerator requires a protocol. BLOCKS production DFT campaigns.",
+      "dependencies": [],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T4.2",
+      "name": "DB provenance stamping",
+      "description": "database/asedb.py stamps every row: protocol hash, package version, git SHA, timestamp. Round-trip test. BLOCKS production DFT campaigns.",
+      "dependencies": ["T4.1"],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
+    },
+    {
+      "id": "T4.3",
+      "name": "Golden-file INCAR test for production protocol",
+      "description": "Golden-file INCAR test for pinned production protocol (ENCUT=520, U(V)=3.25, D3BJ) so protocol drift breaks CI.",
+      "dependencies": ["T4.1"],
+      "status": "not-started",
+      "spec": "nh3sofc_code_review_and_plan_v3.md",
+      "track": "E"
     }
   ]
 }
