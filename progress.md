@@ -5,9 +5,9 @@
 **Last Updated:** 2026-07-08
 **Repo Root:** `/Users/zhenzhu/NH3SOFC`
 **Startup Path:** `./init.sh`
-**Verification Path:** `pytest tests/ -v` (114 tests passing)
-**All baseline features:** passing (feat-001 through feat-010, T0.1–T0.4)
-**Current Blockers:** None
+**Verification Path:** `pytest tests/ -v` (132 tests passing)
+**All baseline features:** passing (feat-001 through feat-010, T0.1–T1.3)
+**Current Blockers:** G1 (thermochemistry integration) blocks meaningful Ni MKM results
 
 ## Session Log
 
@@ -109,6 +109,8 @@
 
 **Verification:** 114 tests passing (110 existing + 4 ratchet)
 
+**Commits:** ab6a2e4
+
 **Known Risks:** None
 
 ### Session 6 continued — 2026-07-08
@@ -127,6 +129,12 @@
 **Key finding:** Thermochemistry corrections (ZPE + vibrational entropy + gas-phase entropy) are mandatory for MKM. The H₂ desorption free energy (dG_H2 = +1.06 eV at 0K, ~+0.36 eV at 673K with TΔS) completely controls surface H* coverage and TOF.
 
 **Verification:** 132 tests passing (18 oracle + 4 ratchet + 110 existing)
+
+**Commits:** cc25acf, fb5c300, 2499d23
+
+**Known Risks:** None
+
+**Metrics baseline (post-solver fix):** funcs=532, annotated=450 (84.6%), prints=226, excepts=21
 
 ## Notes for Next Session
 

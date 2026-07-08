@@ -6,7 +6,7 @@
       "description": "Project installs cleanly, all tests pass, import smoke checks succeed, init.sh runs without errors",
       "dependencies": [],
       "status": "passing",
-      "evidence": "pytest tests/ -v passes (110 tests); import smoke checks pass; init.sh runs clean"
+      "evidence": "pytest tests/ -v passes (132 tests); import smoke checks pass; init.sh runs clean"
     },
     {
       "id": "feat-002",
@@ -116,7 +116,7 @@
       "description": "Create scripts/metrics.py (AST-based, not regex): counts total functions, annotated functions, print() calls, broad/bare excepts. Emits metrics_baseline.json. Add tests/test_metrics_ratchet.py enforcing no-worse-than baseline.",
       "dependencies": [],
       "status": "passing",
-      "evidence": "scripts/metrics.py (AST+tokenize), tests/test_metrics_ratchet.py (4 tests), metrics_baseline.json generated. Baseline: funcs=530, annotated=448 (84.5%), prints=226, excepts=21. 114 tests passing.",
+      "evidence": "scripts/metrics.py (AST+tokenize), tests/test_metrics_ratchet.py (4 tests), metrics_baseline.json generated. Baseline: funcs=532, annotated=450 (84.6%), prints=226, excepts=21. 132 tests passing.",
       "spec": "nh3sofc_code_review_and_plan_v3.md",
       "track": "E"
     },
